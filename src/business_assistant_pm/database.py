@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import DateTime, String, Text, create_engine
+from sqlalchemy import DateTime, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -118,7 +118,27 @@ class PmDatabase:
             path.parent.mkdir(parents=True, exist_ok=True)
             self._engine = create_engine(f"sqlite:///{path}", echo=False)
         Base.metadata.create_all(self._engine)
+        self._migrate_add_missing_columns()
         self._session_factory = sessionmaker(bind=self._engine, expire_on_commit=False)
+
+    def _migrate_add_missing_columns(self) -> None:
+        """Add columns present in models but missing from existing tables."""
+        insp = inspect(self._engine)
+        for table_name, table in Base.metadata.tables.items():
+            try:
+                existing = {col["name"] for col in insp.get_columns(table_name)}
+            except Exception:
+                continue
+            for col in table.columns:
+                if col.name not in existing:
+                    col_type = col.type.compile(dialect=self._engine.dialect)
+                    with self._engine.begin() as conn:
+                        conn.execute(
+                            text(
+                                f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}"
+                            )
+                        )
+                    logger.info("Added column %s.%s (%s)", table_name, col.name, col_type)
 
     def _open(self) -> Session:
         """Open a new session."""

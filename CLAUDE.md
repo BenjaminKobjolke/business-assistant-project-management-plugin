@@ -26,6 +26,8 @@ SQLite at `data/pm.db` with tables:
 - `pm_contacts` — Delegation contacts with RTM list tags
 - `pm_tracking` — Email-task tracking records
 
+Auto-migration: `_migrate_add_missing_columns()` in `PmDatabase.__init__` adds missing nullable columns to existing tables via `ALTER TABLE ADD COLUMN`. New columns must be nullable (`Mapped[type | None]`) with `default=None` for this to work.
+
 ## Cross-Plugin Dependencies
 
 Accesses other plugin services via `ctx.deps.plugin_data`:
@@ -43,3 +45,4 @@ Accesses other plugin services via `ctx.deps.plugin_data`:
 - Frozen dataclasses for settings
 - Type hints on all public APIs
 - Tests must be fast and isolated (no network, in-memory SQLite)
+- New DB columns must be nullable with `default=None` — auto-migration uses `ALTER TABLE ADD COLUMN` which requires this for SQLite

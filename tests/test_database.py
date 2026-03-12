@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from sqlalchemy import create_engine, text
+
 from business_assistant_pm.database import PmDatabase
 
 
@@ -293,3 +297,96 @@ class TestTracking:
         alice_records = db.list_tracking(delegated_to="alice")
         assert len(alice_records) == 1
         assert alice_records[0].delegated_to == "alice"
+
+
+def _create_old_schema_db(db_path: Path) -> None:
+    """Create a DB with the old pm_projects schema (no project_folder column)."""
+    engine = create_engine(f"sqlite:///{db_path}", echo=False)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE pm_settings (key VARCHAR PRIMARY KEY, value TEXT)"
+        ))
+        conn.execute(text(
+            "CREATE TABLE pm_projects ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "name VARCHAR UNIQUE, "
+            "rtm_tag VARCHAR, "
+            "obsidian_vault VARCHAR, "
+            "obsidian_path VARCHAR, "
+            "created_at DATETIME)"
+        ))
+        conn.execute(text(
+            "CREATE TABLE pm_project_synonyms ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "synonym VARCHAR UNIQUE, "
+            "project_id INTEGER)"
+        ))
+        conn.execute(text(
+            "CREATE TABLE pm_contacts ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "name VARCHAR UNIQUE, "
+            "email VARCHAR, "
+            "rtm_list_tag VARCHAR)"
+        ))
+        conn.execute(text(
+            "CREATE TABLE pm_tracking ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "tracking_id VARCHAR UNIQUE, "
+            "email_id VARCHAR, "
+            "email_folder VARCHAR, "
+            "email_subject VARCHAR, "
+            "email_from VARCHAR, "
+            "task_name VARCHAR, "
+            "rtm_task_id VARCHAR, "
+            "delegated_to VARCHAR, "
+            "project_name VARCHAR, "
+            "status VARCHAR, "
+            "created_at DATETIME, "
+            "completed_at DATETIME)"
+        ))
+        conn.execute(text(
+            "CREATE TABLE pm_workflows ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "name VARCHAR UNIQUE, "
+            "instructions TEXT, "
+            "created_at DATETIME)"
+        ))
+        conn.execute(text(
+            "CREATE TABLE pm_workflow_synonyms ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "synonym VARCHAR UNIQUE, "
+            "workflow_id INTEGER)"
+        ))
+    engine.dispose()
+
+
+class TestAutoMigration:
+    def test_missing_column_is_added(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "test.db"
+        _create_old_schema_db(db_path)
+        db = PmDatabase(str(db_path))
+        project = db.add_project("MigTest", project_folder="MyFolder")
+        assert project.project_folder == "MyFolder"
+
+    def test_migration_is_idempotent(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "test.db"
+        _create_old_schema_db(db_path)
+        PmDatabase(str(db_path))
+        PmDatabase(str(db_path))  # second init should not error
+
+    def test_existing_data_preserved_after_migration(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "test.db"
+        _create_old_schema_db(db_path)
+        engine = create_engine(f"sqlite:///{db_path}", echo=False)
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO pm_projects (name, rtm_tag, created_at) "
+                "VALUES ('OldProject', '#old', '2025-01-01 00:00:00')"
+            ))
+        engine.dispose()
+        db = PmDatabase(str(db_path))
+        project = db.get_project_by_name("OldProject")
+        assert project is not None
+        assert project.name == "OldProject"
+        assert project.rtm_tag == "#old"
+        assert project.project_folder is None
