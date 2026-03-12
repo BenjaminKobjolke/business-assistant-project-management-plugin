@@ -50,6 +50,58 @@ class TestProjectService:
         result = svc.add_synonym("Ghost", "alias")
         assert "not found" in result
 
+    def test_add_synonym_duplicate_same_project(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("Project")
+        svc.add_synonym("Project", "alias")
+        result = svc.add_synonym("Project", "alias")
+        assert "already exists" in result
+        assert "Project" in result
+
+    def test_add_synonym_duplicate_other_project(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("Alpha")
+        svc.add_project("Beta")
+        svc.add_synonym("Alpha", "shared")
+        result = svc.add_synonym("Beta", "shared")
+        assert "ERROR" in result
+        assert "Alpha" in result
+
+    def test_add_synonym_conflicts_with_project_name(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("Alpha")
+        svc.add_project("Beta")
+        result = svc.add_synonym("Alpha", "Beta")
+        assert "ERROR" in result
+        assert "conflicts" in result
+
+    def test_add_synonym_case_insensitive_duplicate(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("Project")
+        svc.add_synonym("Project", "alias")
+        result = svc.add_synonym("Project", "ALIAS")
+        assert "already exists" in result
+
+    def test_check_synonym_conflicts_none(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("Alpha")
+        svc.add_synonym("Alpha", "a1")
+        result = json.loads(svc.check_synonym_conflicts())
+        assert result["status"] == "ok"
+
+    def test_check_synonym_conflicts_found(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("Alpha")
+        p2 = db.add_project("Beta")
+        # Directly add synonym via db to bypass service-level checks
+        db.add_synonym(p2.id, "alpha")
+        result = json.loads(svc.check_synonym_conflicts())
+        assert result["status"] == "conflicts_found"
+        assert len(result["conflicts"]) == 1
+        assert result["conflicts"][0]["synonym"] == "alpha"
+        assert result["conflicts"][0]["owned_by"] == "Beta"
+        assert result["conflicts"][0]["conflicts_with"] == "Alpha"
+
     def test_list_projects(self, db: PmDatabase) -> None:
         svc = ProjectService(db)
         svc.add_project("A", rtm_tag="#a")

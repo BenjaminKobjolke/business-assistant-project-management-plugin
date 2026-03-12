@@ -7,6 +7,12 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
+from .constants import (
+    ERR_PROJECT_NOT_FOUND,
+    ERR_SYNONYM_ALREADY_EXISTS,
+    ERR_SYNONYM_CONFLICTS_WITH_PROJECT_NAME,
+    ERR_SYNONYM_EXISTS_OTHER_PROJECT,
+)
 from .database import PmDatabase, PmProject
 
 
@@ -45,7 +51,27 @@ class ProjectService:
         """Add a synonym for a project. Returns confirmation message."""
         project = self._db.get_project_by_name(project_name)
         if not project:
-            return f"Project '{project_name}' not found."
+            return ERR_PROJECT_NOT_FOUND.format(reference=project_name)
+
+        # Check if synonym conflicts with an existing project name
+        name_match = self._db.get_project_by_name(synonym)
+        if name_match:
+            return ERR_SYNONYM_CONFLICTS_WITH_PROJECT_NAME.format(
+                synonym=synonym, project_name=name_match.name,
+            )
+
+        # Check if synonym already exists for any project
+        existing = self._db.get_synonym_with_project(synonym)
+        if existing:
+            _, owner = existing
+            if owner.id == project.id:
+                return ERR_SYNONYM_ALREADY_EXISTS.format(
+                    synonym=synonym, project_name=project.name,
+                )
+            return ERR_SYNONYM_EXISTS_OTHER_PROJECT.format(
+                synonym=synonym, project_name=owner.name,
+            )
+
         try:
             self._db.add_synonym(project.id, synonym)
             return f"Synonym '{synonym}' added for project '{project.name}'."
@@ -148,6 +174,28 @@ class ProjectService:
         if parts:
             return f"Project '{project_name}' synced. {', '.join(parts)}"
         return f"No RTM tag found in note for project '{project_name}'."
+
+    def check_synonym_conflicts(self) -> str:
+        """Check all projects for synonym conflicts. Returns JSON report."""
+        projects = self._db.list_projects()
+        conflicts: list[dict[str, str]] = []
+
+        for project in projects:
+            synonyms = self._db.get_synonyms_for_project(project.id)
+            for synonym in synonyms:
+                # Check if synonym matches another project's name
+                name_match = self._db.get_project_by_name(synonym)
+                if name_match and name_match.id != project.id:
+                    conflicts.append({
+                        "type": "synonym_matches_project_name",
+                        "synonym": synonym,
+                        "owned_by": project.name,
+                        "conflicts_with": name_match.name,
+                    })
+
+        if not conflicts:
+            return json.dumps({"status": "ok", "message": "No synonym conflicts found."})
+        return json.dumps({"status": "conflicts_found", "conflicts": conflicts})
 
     def list_projects(self) -> str:
         """List all projects as JSON."""

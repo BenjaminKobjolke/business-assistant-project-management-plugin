@@ -93,6 +93,19 @@ ERR_FILESYSTEM_NOT_LOADED = (
     "ERROR: Filesystem plugin not loaded. Project management requires filesystem."
 )
 ERR_PROJECT_NO_FOLDER = "ERROR: Project '{name}' has no project folder configured."
+ERR_BASE_PATH_REQUIRED_FOR_FOLDER = (
+    "ERROR: Setting '{key}' must be configured to create the project folder on disk. "
+    "Please set it with: pm_set_setting(key=\"{key}\", value=\"<path>\")"
+)
+ERR_SYNONYM_EXISTS_OTHER_PROJECT = (
+    "ERROR: Synonym '{synonym}' is already assigned to project '{project_name}'."
+)
+ERR_SYNONYM_ALREADY_EXISTS = (
+    "Synonym '{synonym}' already exists for project '{project_name}'."
+)
+ERR_SYNONYM_CONFLICTS_WITH_PROJECT_NAME = (
+    "ERROR: Synonym '{synonym}' conflicts with existing project name '{project_name}'."
+)
 
 # System prompt extra
 SYSTEM_PROMPT_PM = """\
@@ -126,6 +139,7 @@ When previewing a task before creation, always show the project tag explicitly.
 - pm_create_project_from_note: Create project from an existing Obsidian note
 - pm_list_projects / pm_add_project / pm_add_project_synonym / pm_match_project
 - pm_sync_project_from_obsidian: Re-read note to extract RTM tag
+- pm_check_synonym_conflicts: Audit all projects for synonym-vs-name conflicts
 
 ## Creating New Projects — IMPORTANT
 When the user asks to create a new project, use pm_create_project.
@@ -137,6 +151,8 @@ Before calling it, ask the user for:
 5. Projektordner (project folder name, optional)
 6. Synonyms (optional alternative names, comma-separated)
 Requires settings: project_vault, project_template_path, project_folder_path.
+When a Projektordner is provided, the folder is auto-created on disk at
+{project_files_base_path}/{project_folder}. Requires project_files_base_path to be set.
 
 ## Creating Projects from Existing Notes
 When the user wants to register an existing Obsidian note as a project,

@@ -292,6 +292,27 @@ class PmDatabase:
             )
             return [r.synonym for r in rows]
 
+    def get_synonym_with_project(self, synonym: str) -> tuple[PmProjectSynonym, PmProject] | None:
+        """Look up a synonym and its owning project. Returns None if not found."""
+        with self._open() as session:
+            row = (
+                session.query(PmProjectSynonym)
+                .filter(PmProjectSynonym.synonym == synonym.lower())
+                .first()
+            )
+            if not row:
+                return None
+            project = (
+                session.query(PmProject)
+                .filter(PmProject.id == row.project_id)
+                .first()
+            )
+            if not project:
+                return None
+            session.expunge(row)
+            session.expunge(project)
+            return (row, project)
+
     # --- Workflows ---
 
     def add_workflow(self, name: str, instructions: str) -> PmWorkflow:

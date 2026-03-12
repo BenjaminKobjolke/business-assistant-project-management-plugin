@@ -71,13 +71,23 @@ def pm_add_project(
             except Exception:
                 pass
 
-    return proj_svc.add_project(
+    result = proj_svc.add_project(
         name=name,
         rtm_tag=effective_rtm_tag,
         obsidian_vault=obsidian_vault or None,
         obsidian_path=obsidian_path or None,
         project_folder=project_folder or None,
     )
+
+    if project_folder:
+        filesystem_service = _get_filesystem_service(ctx)
+        if filesystem_service:
+            base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
+            if base_path:
+                folder_path_full = f"{base_path}/{project_folder}"
+                filesystem_service.create_directory(folder_path_full)
+
+    return result
 
 
 def pm_add_project_synonym(
@@ -201,13 +211,32 @@ def pm_create_project(
         project_folder=project_folder or None,
     )
 
-    # 8. Add synonyms if provided
+    # 8. Create project folder on disk if project_folder provided
+    folder_created = ""
+    if project_folder:
+        filesystem_service = _get_filesystem_service(ctx)
+        if not filesystem_service:
+            return ERR_FILESYSTEM_NOT_LOADED
+        err = _require_setting(db, SETTING_PROJECT_FILES_BASE_PATH)
+        if err:
+            return err
+        base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
+        assert base_path is not None
+        folder_path_full = f"{base_path}/{project_folder}"
+        dir_result = filesystem_service.create_directory(folder_path_full)
+        if not dir_result.startswith("{"):
+            return dir_result
+        folder_created = f"Folder created: {folder_path_full}"
+
+    # 9. Add synonyms if provided
     synonym_results = []
     if synonyms:
         for synonym in (s.strip() for s in synonyms.split(",") if s.strip()):
             synonym_results.append(proj_svc.add_synonym(project_name, synonym))
 
     parts = [result, f"Note created at: {vault}/{target_path}"]
+    if folder_created:
+        parts.append(folder_created)
     parts.extend(synonym_results)
     return "\n".join(parts)
 
@@ -270,13 +299,27 @@ def pm_create_project_from_note(
         project_folder=project_folder,
     )
 
-    # 7. Build response
+    # 7. Create project folder on disk if extracted (best-effort)
+    folder_created = ""
+    if project_folder:
+        filesystem_service = _get_filesystem_service(ctx)
+        if filesystem_service:
+            base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
+            if base_path:
+                folder_path_full = f"{base_path}/{project_folder}"
+                dir_result = filesystem_service.create_directory(folder_path_full)
+                if dir_result.startswith("{"):
+                    folder_created = f"Folder created: {folder_path_full}"
+
+    # 8. Build response
     parts = [result]
     if rtm_tag:
         parts.append(f"RTM tag extracted: {rtm_tag}")
     else:
         parts.append("No RTM tag found in note.")
     parts.append(f"Note linked: {vault}/{note_path}")
+    if folder_created:
+        parts.append(folder_created)
 
     if suggestions:
         parts.append("")
@@ -289,7 +332,17 @@ def pm_create_project_from_note(
                 if proj_svc.extract_field(content, field) == s:
                     source = label
                     break
-            parts.append(f"- {s} (from {source})")
+            # Check if suggestion conflicts with existing synonym or project name
+            conflict = ""
+            name_match = db.get_project_by_name(s)
+            if name_match:
+                conflict = f" [conflicts with project name '{name_match.name}']"
+            else:
+                existing = db.get_synonym_with_project(s)
+                if existing:
+                    _, owner = existing
+                    conflict = f" [already assigned to '{owner.name}']"
+            parts.append(f"- {s} (from {source}){conflict}")
         parts.append("")
         parts.append("To add synonyms, ask the user which ones to keep.")
 
@@ -357,3 +410,11 @@ def pm_store_file_in_project(
         return copy_result
 
     return f"File stored: {target_file}"
+
+
+def pm_check_synonym_conflicts(ctx: RunContext[Deps]) -> str:
+    """Check all projects for synonym conflicts (synonym matching another project name)."""
+    logger.info("pm_check_synonym_conflicts")
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    return proj_svc.check_synonym_conflicts()

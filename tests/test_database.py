@@ -116,6 +116,26 @@ class TestSynonyms:
         synonyms = db.get_synonyms_for_project(project.id)
         assert synonyms == ["mixed"]
 
+    def test_get_synonym_with_project(self, db: PmDatabase) -> None:
+        project = db.add_project("Owner")
+        db.add_synonym(project.id, "myalias")
+        result = db.get_synonym_with_project("myalias")
+        assert result is not None
+        synonym_row, owner = result
+        assert synonym_row.synonym == "myalias"
+        assert owner.name == "Owner"
+
+    def test_get_synonym_with_project_not_found(self, db: PmDatabase) -> None:
+        assert db.get_synonym_with_project("nonexistent") is None
+
+    def test_get_synonym_with_project_case_insensitive(self, db: PmDatabase) -> None:
+        project = db.add_project("CaseProject")
+        db.add_synonym(project.id, "mixed")
+        result = db.get_synonym_with_project("MIXED")
+        assert result is not None
+        _, owner = result
+        assert owner.name == "CaseProject"
+
 
 class TestWorkflows:
     def test_add_workflow(self, db: PmDatabase) -> None:
