@@ -154,6 +154,10 @@ Body: original content + [PM-TRACK:<uuid>]
 - pm_list_workflows: List all workflows as JSON
 - pm_run_workflow: Look up a workflow by name or synonym and return its instructions
 
+When the user mentions running, starting, or executing a workflow, always call pm_run_workflow
+first with the best matching reference extracted from their message. Do NOT ask clarifying
+questions. Only ask if pm_run_workflow returns no match.
+
 When pm_run_workflow returns instructions, follow them step by step using the available tools.
 Workflows are reusable multi-step processes defined by the user.
 
