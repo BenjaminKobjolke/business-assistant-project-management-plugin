@@ -1,11 +1,17 @@
-"""Tests for ProjectService."""
+"""Tests for ProjectService and project synonym tools."""
 
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock
 
+from business_assistant.agent.deps import Deps
+from pydantic_ai import RunContext
+
+from business_assistant_pm.constants import PLUGIN_DATA_PM_DATABASE
 from business_assistant_pm.database import PmDatabase
 from business_assistant_pm.project_service import ProjectService
+from business_assistant_pm.tools_project import pm_add_project_synonym, pm_remove_project_synonym
 
 
 class TestProjectService:
@@ -74,6 +80,18 @@ class TestProjectService:
         result = svc.add_synonym("Alpha", "Beta")
         assert "ERROR" in result
         assert "conflicts" in result
+
+    def test_remove_synonym(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("Project")
+        svc.add_synonym("Project", "removable")
+        result = svc.remove_synonym("removable")
+        assert "removed" in result
+
+    def test_remove_synonym_not_found(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        result = svc.remove_synonym("ghost")
+        assert "not found" in result
 
     def test_add_synonym_case_insensitive_duplicate(self, db: PmDatabase) -> None:
         svc = ProjectService(db)
@@ -244,3 +262,27 @@ class TestFormatProjectDetails:
         assert "Obsidian: vault/notes/full.md" in result
         assert "Project Folder: FullFolder" in result
         assert "Synonyms: f" in result
+
+
+def _make_ctx(db: PmDatabase) -> RunContext[Deps]:
+    """Build a minimal RunContext with plugin_data."""
+    plugin_data: dict = {PLUGIN_DATA_PM_DATABASE: db}
+    deps = MagicMock(spec=Deps)
+    deps.plugin_data = plugin_data
+    ctx = MagicMock(spec=RunContext)
+    ctx.deps = deps
+    return ctx
+
+
+class TestPmRemoveProjectSynonym:
+    def test_remove_synonym(self, db: PmDatabase) -> None:
+        ctx = _make_ctx(db)
+        db.add_project("Project")
+        pm_add_project_synonym(ctx, "Project", "removable")
+        result = pm_remove_project_synonym(ctx, "removable")
+        assert "removed" in result
+
+    def test_remove_synonym_not_found(self, db: PmDatabase) -> None:
+        ctx = _make_ctx(db)
+        result = pm_remove_project_synonym(ctx, "ghost")
+        assert "not found" in result

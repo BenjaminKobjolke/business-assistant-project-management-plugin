@@ -16,7 +16,7 @@ class TestPluginRegistration:
         registry = PluginRegistry()
         register(registry)
 
-        assert len(registry.all_tools()) == 28
+        assert len(registry.all_tools()) == 29
         assert len(registry.plugins) == 1
         assert registry.plugins[0].name == "project_management"
         assert registry.plugins[0].category == "project_management"
@@ -75,6 +75,7 @@ class TestPluginRegistration:
             "pm_create_project_from_note",
             "pm_add_project",
             "pm_add_project_synonym",
+            "pm_remove_project_synonym",
             "pm_match_project",
             "pm_sync_project_from_obsidian",
             "pm_store_file_in_project",

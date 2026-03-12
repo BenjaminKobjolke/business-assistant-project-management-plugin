@@ -9,6 +9,7 @@ from typing import Any
 
 from .constants import (
     ERR_PROJECT_NOT_FOUND,
+    ERR_PROJECT_SYNONYM_NOT_FOUND,
     ERR_SYNONYM_ALREADY_EXISTS,
     ERR_SYNONYM_CONFLICTS_WITH_PROJECT_NAME,
     ERR_SYNONYM_EXISTS_OTHER_PROJECT,
@@ -77,6 +78,12 @@ class ProjectService:
             return f"Synonym '{synonym}' added for project '{project.name}'."
         except Exception as e:
             return f"Error adding synonym: {e}"
+
+    def remove_synonym(self, synonym: str) -> str:
+        """Remove a project synonym. Returns confirmation message."""
+        if self._db.delete_project_synonym(synonym):
+            return f"Synonym '{synonym}' removed."
+        return ERR_PROJECT_SYNONYM_NOT_FOUND.format(synonym=synonym)
 
     @staticmethod
     def extract_field(note_content: str, field_name: str) -> str | None:

@@ -136,6 +136,25 @@ class TestSynonyms:
         _, owner = result
         assert owner.name == "CaseProject"
 
+    def test_add_synonym_idempotent_same_project(self, db: PmDatabase) -> None:
+        project = db.add_project("Project")
+        first = db.add_synonym(project.id, "Alias")
+        second = db.add_synonym(project.id, "Alias")
+        assert first.synonym == second.synonym
+        assert first.project_id == second.project_id
+        # Only one synonym row should exist
+        assert db.get_synonyms_for_project(project.id) == ["alias"]
+
+    def test_delete_project_synonym(self, db: PmDatabase) -> None:
+        project = db.add_project("Project")
+        db.add_synonym(project.id, "removable")
+        result = db.delete_project_synonym("removable")
+        assert result is True
+        assert db.get_synonyms_for_project(project.id) == []
+
+    def test_delete_project_synonym_not_found(self, db: PmDatabase) -> None:
+        assert db.delete_project_synonym("ghost") is False
+
 
 class TestWorkflows:
     def test_add_workflow(self, db: PmDatabase) -> None:

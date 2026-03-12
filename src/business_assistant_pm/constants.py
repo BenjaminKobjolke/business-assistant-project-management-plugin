@@ -88,6 +88,7 @@ ERR_TRACKING_NOT_FOUND = "ERROR: Tracking record '{tracking_id}' not found."
 ERR_TEMPLATE_READ_FAILED = "ERROR: Failed to read project template: {error}"
 ERR_NOTE_CREATION_FAILED = "ERROR: Failed to create project note: {error}"
 ERR_WORKFLOW_NOT_FOUND = "ERROR: Workflow '{reference}' not found."
+ERR_PROJECT_SYNONYM_NOT_FOUND = "ERROR: Project synonym '{synonym}' not found."
 ERR_WORKFLOW_SYNONYM_NOT_FOUND = "ERROR: Workflow synonym '{synonym}' not found."
 ERR_FILESYSTEM_NOT_LOADED = (
     "ERROR: Filesystem plugin not loaded. Project management requires filesystem."
@@ -137,7 +138,8 @@ When previewing a task before creation, always show the project tag explicitly.
 ## Projects
 - pm_create_project: Create a new project from Obsidian template
 - pm_create_project_from_note: Create project from an existing Obsidian note
-- pm_list_projects / pm_add_project / pm_add_project_synonym / pm_match_project
+- pm_list_projects / pm_add_project / pm_add_project_synonym / pm_remove_project_synonym
+- pm_match_project
 - pm_sync_project_from_obsidian: Re-read note to extract RTM tag
 - pm_check_synonym_conflicts: Audit all projects for synonym-vs-name conflicts
 

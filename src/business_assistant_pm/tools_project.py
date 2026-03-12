@@ -100,6 +100,14 @@ def pm_add_project_synonym(
     return proj_svc.add_synonym(project_name, synonym)
 
 
+def pm_remove_project_synonym(ctx: RunContext[Deps], synonym: str) -> str:
+    """Remove an alternative name for a project."""
+    logger.info("pm_remove_project_synonym: synonym=%r", synonym)
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    return proj_svc.remove_synonym(synonym)
+
+
 def pm_match_project(ctx: RunContext[Deps], reference: str) -> str:
     """Match a reference to a known project by name or synonym."""
     logger.info("pm_match_project: reference=%r", reference)

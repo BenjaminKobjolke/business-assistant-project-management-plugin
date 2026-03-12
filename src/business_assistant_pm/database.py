@@ -271,8 +271,16 @@ class PmDatabase:
     # --- Synonyms ---
 
     def add_synonym(self, project_id: int, synonym: str) -> PmProjectSynonym:
-        """Add a synonym for a project."""
+        """Add a synonym for a project. Idempotent for the same project."""
         with self._open() as session:
+            existing = (
+                session.query(PmProjectSynonym)
+                .filter(PmProjectSynonym.synonym == synonym.lower())
+                .first()
+            )
+            if existing and existing.project_id == project_id:
+                session.expunge(existing)
+                return existing
             row = PmProjectSynonym(
                 synonym=synonym.lower(),
                 project_id=project_id,
@@ -312,6 +320,20 @@ class PmDatabase:
             session.expunge(row)
             session.expunge(project)
             return (row, project)
+
+    def delete_project_synonym(self, synonym: str) -> bool:
+        """Delete a project synonym."""
+        with self._open() as session:
+            row = (
+                session.query(PmProjectSynonym)
+                .filter(PmProjectSynonym.synonym == synonym.lower())
+                .first()
+            )
+            if not row:
+                return False
+            session.delete(row)
+            session.commit()
+            return True
 
     # --- Workflows ---
 
