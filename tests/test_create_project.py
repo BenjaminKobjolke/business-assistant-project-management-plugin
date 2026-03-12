@@ -10,11 +10,13 @@ from business_assistant.agent.deps import Deps
 from pydantic_ai import RunContext
 
 from business_assistant_pm.constants import (
+    ERR_FILESYSTEM_NOT_LOADED,
     ERR_NOTE_CREATION_FAILED,
     ERR_OBSIDIAN_NOT_LOADED,
     ERR_SETTING_MISSING,
     ERR_TEMPLATE_READ_FAILED,
     PLUGIN_DATA_PM_DATABASE,
+    SETTING_PROJECT_FILES_BASE_PATH,
     SETTING_PROJECT_FOLDER_PATH,
     SETTING_PROJECT_TEMPLATE_PATH,
     SETTING_PROJECT_VAULT,
@@ -111,11 +113,14 @@ class TestBuildProjectNotePath:
 def _make_ctx(
     db: PmDatabase,
     obsidian_service: object | None = None,
+    filesystem_service: object | None = None,
 ) -> RunContext[Deps]:
     """Build a minimal RunContext with plugin_data."""
     plugin_data: dict = {PLUGIN_DATA_PM_DATABASE: db}
     if obsidian_service is not None:
         plugin_data["obsidian_service"] = obsidian_service
+    if filesystem_service is not None:
+        plugin_data["filesystem_service"] = filesystem_service
     deps = MagicMock(spec=Deps)
     deps.plugin_data = plugin_data
     ctx = MagicMock(spec=RunContext)
@@ -258,3 +263,87 @@ class TestPmCreateProjectTool:
             db.get_project_by_name("Solo").id,
         )
         assert synonyms == []
+
+    def test_project_folder_created_on_disk(self, db: PmDatabase) -> None:
+        self._setup_settings(db)
+        db.set_setting(SETTING_PROJECT_FILES_BASE_PATH, "Y:")
+
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": TEMPLATE_CONTENT})
+        obsidian.create_note.return_value = "ok"
+
+        filesystem = MagicMock()
+        filesystem.create_directory.return_value = '{"success": true}'
+
+        ctx = _make_ctx(db, obsidian, filesystem_service=filesystem)
+        result = pm_create_project(
+            ctx,
+            filename="acme",
+            customer_name="ACME",
+            rtm_tag="#p_acme",
+            project_name="ACME",
+            project_folder="ACME_Folder",
+        )
+
+        assert "Folder created: Y:/ACME_Folder" in result
+        filesystem.create_directory.assert_called_once_with("Y:/ACME_Folder")
+
+    def test_project_folder_missing_filesystem_service(self, db: PmDatabase) -> None:
+        self._setup_settings(db)
+        db.set_setting(SETTING_PROJECT_FILES_BASE_PATH, "Y:")
+
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": TEMPLATE_CONTENT})
+        obsidian.create_note.return_value = "ok"
+
+        ctx = _make_ctx(db, obsidian)
+        result = pm_create_project(
+            ctx,
+            filename="acme",
+            customer_name="ACME",
+            rtm_tag="#p_acme",
+            project_name="ACME",
+            project_folder="ACME_Folder",
+        )
+
+        assert result == ERR_FILESYSTEM_NOT_LOADED
+
+    def test_project_folder_missing_base_path(self, db: PmDatabase) -> None:
+        self._setup_settings(db)
+        # Do NOT set SETTING_PROJECT_FILES_BASE_PATH
+
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": TEMPLATE_CONTENT})
+        obsidian.create_note.return_value = "ok"
+
+        filesystem = MagicMock()
+        ctx = _make_ctx(db, obsidian, filesystem_service=filesystem)
+        result = pm_create_project(
+            ctx,
+            filename="acme",
+            customer_name="ACME",
+            rtm_tag="#p_acme",
+            project_name="ACME",
+            project_folder="ACME_Folder",
+        )
+
+        assert result == ERR_SETTING_MISSING.format(key=SETTING_PROJECT_FILES_BASE_PATH)
+
+    def test_no_project_folder_skips_creation(self, db: PmDatabase) -> None:
+        self._setup_settings(db)
+
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": TEMPLATE_CONTENT})
+        obsidian.create_note.return_value = "ok"
+
+        ctx = _make_ctx(db, obsidian)
+        result = pm_create_project(
+            ctx,
+            filename="nofolder",
+            customer_name="NoFolder Inc",
+            rtm_tag="#p_nofolder",
+            project_name="NoFolder",
+        )
+
+        assert "created" in result
+        assert "Folder created" not in result
