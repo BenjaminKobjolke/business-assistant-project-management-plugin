@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 
@@ -30,6 +31,20 @@ from .plugin_helpers import _get_filesystem_service, _get_obsidian_service, _req
 from .project_service import ProjectService
 
 logger = logging.getLogger(__name__)
+
+_DRIVE_RE = re.compile(r"^[a-zA-Z]:[/\\]")
+
+
+def _resolve_project_folder(base_path: str, project_folder: str) -> str:
+    """Combine base_path with project_folder, handling absolute paths.
+
+    If project_folder already starts with a drive letter (e.g. ``y:/...``)
+    or a root slash, it is used as-is to avoid producing invalid paths
+    like ``Y:/y:/...``.
+    """
+    if _DRIVE_RE.match(project_folder) or project_folder.startswith(("/", "\\")):
+        return project_folder
+    return f"{base_path}/{project_folder}"
 
 
 def _get_db(ctx: RunContext[Deps]) -> PmDatabase:
@@ -84,7 +99,7 @@ def pm_add_project(
         if filesystem_service:
             base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
             if base_path:
-                folder_path_full = f"{base_path}/{project_folder}"
+                folder_path_full = _resolve_project_folder(base_path, project_folder)
                 filesystem_service.create_directory(folder_path_full)
 
     return result
@@ -230,7 +245,7 @@ def pm_create_project(
             return err
         base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
         assert base_path is not None
-        folder_path_full = f"{base_path}/{project_folder}"
+        folder_path_full = _resolve_project_folder(base_path, project_folder)
         dir_result = filesystem_service.create_directory(folder_path_full)
         if not dir_result.startswith("{"):
             return dir_result
@@ -314,7 +329,7 @@ def pm_create_project_from_note(
         if filesystem_service:
             base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
             if base_path:
-                folder_path_full = f"{base_path}/{project_folder}"
+                folder_path_full = _resolve_project_folder(base_path, project_folder)
                 dir_result = filesystem_service.create_directory(folder_path_full)
                 if dir_result.startswith("{"):
                     folder_created = f"Folder created: {folder_path_full}"
@@ -403,7 +418,8 @@ def pm_store_file_in_project(
 
     # 5. Build target directory
     date_str = datetime.now(tz=UTC).strftime("%Y%m%d")
-    target_dir = f"{base_path}/{project.project_folder}/Source/{date_str}_{source_type}"
+    project_root = _resolve_project_folder(base_path, project.project_folder)
+    target_dir = f"{project_root}/Source/{date_str}_{source_type}"
 
     # 6. Create directory
     dir_result = filesystem_service.create_directory(target_dir)

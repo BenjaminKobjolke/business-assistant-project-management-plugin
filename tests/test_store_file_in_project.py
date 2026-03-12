@@ -166,6 +166,37 @@ class TestPmStoreFileInProject:
         assert "Access denied" in result
 
     @patch("business_assistant_pm.tools_project.datetime")
+    def test_absolute_project_folder_not_double_prefixed(
+        self, mock_dt, db: PmDatabase
+    ) -> None:
+        """project_folder with drive letter should not get base_path prepended."""
+        mock_now = MagicMock()
+        mock_now.strftime.return_value = "20260312"
+        mock_dt.now.return_value = mock_now
+
+        db.add_project("DYADIC", project_folder="y:/20260312 - DYADIC")
+        db.set_setting(SETTING_PROJECT_FILES_BASE_PATH, "Y:")
+        fs = MagicMock()
+        fs.create_directory.return_value = json.dumps(
+            {"path": "y:/20260312 - DYADIC/Source/20260312_email", "status": "created"},
+        )
+        fs.copy_file.return_value = json.dumps(
+            {"source": "s", "destination": "d", "size": 1, "status": "copied"},
+        )
+        ctx = _make_ctx(db, fs)
+        result = pm_store_file_in_project(
+            ctx,
+            project_name="DYADIC",
+            source_file_path="/tmp/attachment.pdf",
+            source_type="email",
+        )
+        assert "File stored:" in result
+        # Must NOT produce "Y:/y:/..." — should use project_folder as-is
+        fs.create_directory.assert_called_once_with(
+            "y:/20260312 - DYADIC/Source/20260312_email",
+        )
+
+    @patch("business_assistant_pm.tools_project.datetime")
     def test_copy_file_error(self, mock_dt, db: PmDatabase) -> None:
         mock_now = MagicMock()
         mock_now.strftime.return_value = "20260312"
