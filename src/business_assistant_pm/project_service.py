@@ -99,7 +99,7 @@ class ProjectService:
         #tag_value
         """
         match = re.search(
-            r"\*\*RTM Tag\*\*\s*\n+\s*#(\S+)",
+            r"\*\*RTM Tag\*\*\s*\n+\s*\\?#(\S+)",
             note_content,
         )
         if match:

@@ -145,6 +145,11 @@ class TestExtractRtmTag:
         content = "Just some text without RTM Tag section"
         assert ProjectService.extract_rtm_tag(content) is None
 
+    def test_extract_with_escaped_hash(self) -> None:
+        content = "Some text\n\n**RTM Tag**\n\n\\#p_fahrradschreiber\n\nMore text"
+        tag = ProjectService.extract_rtm_tag(content)
+        assert tag == "#p_fahrradschreiber"
+
     def test_extract_malformed(self) -> None:
         content = "**RTM Tag**\n\nno hash here"
         assert ProjectService.extract_rtm_tag(content) is None
