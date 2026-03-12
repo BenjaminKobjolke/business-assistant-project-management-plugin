@@ -56,6 +56,29 @@ class TestFillTemplateFields:
         result = ProjectService.fill_template_fields(template, "Name", "#tag")
         assert result == template
 
+    def test_fills_projektordner(self) -> None:
+        template = (
+            "# Project\n\n"
+            "**Kundenprojektname**\n\n"
+            "**RTM Tag**\n\n"
+            "**Projektordner**\n\n"
+            "## Details\n"
+        )
+        result = ProjectService.fill_template_fields(
+            template, "ACME Corp", "#p_acme", "ACME_Folder",
+        )
+        assert "**Projektordner**\nACME_Folder\n" in result
+
+    def test_no_projektordner_leaves_unchanged(self) -> None:
+        template = (
+            "**Kundenprojektname**\n\n"
+            "**RTM Tag**\n\n"
+            "**Projektordner**\n\n"
+        )
+        result = ProjectService.fill_template_fields(template, "Name", "#tag")
+        # Projektordner heading stays with blank line
+        assert "**Projektordner**\n\n" in result
+
     def test_only_kundenprojektname_present(self) -> None:
         template = "**Kundenprojektname**\n\nSome other text\n"
         result = ProjectService.fill_template_fields(template, "Filled", "#missing")

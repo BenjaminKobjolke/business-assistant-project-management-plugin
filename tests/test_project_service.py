@@ -60,6 +60,21 @@ class TestProjectService:
         assert data["projects"][0]["name"] == "A"
         assert data["projects"][0]["rtm_tag"] == "#a"
 
+    def test_list_projects_includes_folder(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("FolderP", project_folder="MyFolder")
+        result = svc.list_projects()
+        data = json.loads(result)
+        assert data["projects"][0]["project_folder"] == "MyFolder"
+
+    def test_add_project_with_folder(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        result = svc.add_project("WithFolder", project_folder="Folder123")
+        assert "created" in result
+        project = svc.find_project("WithFolder")
+        assert project is not None
+        assert project.project_folder == "Folder123"
+
 
 class TestExtractField:
     def test_extract_kundenprojektname(self) -> None:
@@ -169,9 +184,11 @@ class TestFormatProjectDetails:
             rtm_tag="#full",
             obsidian_vault="vault",
             obsidian_path="notes/full.md",
+            project_folder="FullFolder",
         )
         db.add_synonym(project.id, "f")
         result = svc.format_project_details(project)
         assert "RTM Tag: #full" in result
         assert "Obsidian: vault/notes/full.md" in result
+        assert "Project Folder: FullFolder" in result
         assert "Synonyms: f" in result

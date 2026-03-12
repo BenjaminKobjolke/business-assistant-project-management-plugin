@@ -62,6 +62,10 @@ class TestProjects:
     def test_find_not_found(self, db: PmDatabase) -> None:
         assert db.find_project_by_name_or_synonym("nope") is None
 
+    def test_add_project_with_folder(self, db: PmDatabase) -> None:
+        project = db.add_project("Folder Project", project_folder="ACME_Folder")
+        assert project.project_folder == "ACME_Folder"
+
     def test_update_project(self, db: PmDatabase) -> None:
         db.add_project("Updatable")
         result = db.update_project("Updatable", rtm_tag="#new_tag")
@@ -69,6 +73,14 @@ class TestProjects:
         project = db.get_project_by_name("Updatable")
         assert project is not None
         assert project.rtm_tag == "#new_tag"
+
+    def test_update_project_folder(self, db: PmDatabase) -> None:
+        db.add_project("FolderUpdate")
+        result = db.update_project("FolderUpdate", project_folder="NewFolder")
+        assert result is True
+        project = db.get_project_by_name("FolderUpdate")
+        assert project is not None
+        assert project.project_folder == "NewFolder"
 
     def test_update_project_not_found(self, db: PmDatabase) -> None:
         assert db.update_project("Ghost", rtm_tag="#x") is False

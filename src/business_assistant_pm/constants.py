@@ -18,9 +18,10 @@ PLUGIN_DATA_PM_DATABASE = "pm_database"
 PLUGIN_DATA_RTM_SERVICE = "rtm_service"
 PLUGIN_DATA_EMAIL_SERVICE = "email_service"
 PLUGIN_DATA_OBSIDIAN_SERVICE = "obsidian_service"
+PLUGIN_DATA_FILESYSTEM_SERVICE = "filesystem_service"
 
 # Required categories
-REQUIRED_CATEGORIES = ("todo", "email", "notes", "calendar")
+REQUIRED_CATEGORIES = ("todo", "email", "notes", "calendar", "filesystem")
 
 # Tracking ID format
 TRACKING_ID_PATTERN = r"\[PM-TRACK:([0-9a-f-]{36})\]"
@@ -36,10 +37,15 @@ SETTING_RTM_DEFAULT_TAG = "rtm_default_tag"
 SETTING_PROJECT_VAULT = "project_vault"
 SETTING_PROJECT_TEMPLATE_PATH = "project_template_path"
 SETTING_PROJECT_FOLDER_PATH = "project_folder_path"
+SETTING_PROJECT_FILES_BASE_PATH = "project_files_base_path"
 
 # Setting defaults (used when not configured)
 DEFAULT_PRIORITY = "2"
 DEFAULT_DUE = "tomorrow"
+
+# Source types for file storage
+SOURCE_TYPE_EMAIL = "email"
+SOURCE_TYPE_DOWNLOAD = "download"
 
 # Required settings per workflow
 REQUIRED_SETTINGS_TODO = (SETTING_TODO_FOLDER,)
@@ -83,6 +89,10 @@ ERR_TEMPLATE_READ_FAILED = "ERROR: Failed to read project template: {error}"
 ERR_NOTE_CREATION_FAILED = "ERROR: Failed to create project note: {error}"
 ERR_WORKFLOW_NOT_FOUND = "ERROR: Workflow '{reference}' not found."
 ERR_WORKFLOW_SYNONYM_NOT_FOUND = "ERROR: Workflow synonym '{synonym}' not found."
+ERR_FILESYSTEM_NOT_LOADED = (
+    "ERROR: Filesystem plugin not loaded. Project management requires filesystem."
+)
+ERR_PROJECT_NO_FOLDER = "ERROR: Project '{name}' has no project folder configured."
 
 # System prompt extra
 SYSTEM_PROMPT_PM = """\
@@ -124,7 +134,8 @@ Before calling it, ask the user for:
 2. Kundenprojektname (customer project name)
 3. RTM Tag (e.g., #p_project_name)
 4. Project name (how they want to reference it)
-5. Synonyms (optional alternative names, comma-separated)
+5. Projektordner (project folder name, optional)
+6. Synonyms (optional alternative names, comma-separated)
 Requires settings: project_vault, project_template_path, project_folder_path.
 
 ## Creating Projects from Existing Notes
@@ -160,6 +171,12 @@ questions. Only ask if pm_run_workflow returns no match.
 
 When pm_run_workflow returns instructions, follow them step by step using the available tools.
 Workflows are reusable multi-step processes defined by the user.
+
+## File Storage
+- pm_store_file_in_project: Store a file (email attachment, download) in a project's Source folder
+  Creates {base_path}/{project_folder}/Source/{YYYYMMDD}_{source_type}/ structure.
+  source_type: "email" or "download"
+  Requires setting: project_files_base_path
 
 ## Missing Settings Behavior
 If a required setting is missing, the tool returns an error message telling you exactly

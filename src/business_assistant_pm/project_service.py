@@ -22,6 +22,7 @@ class ProjectService:
         rtm_tag: str | None = None,
         obsidian_vault: str | None = None,
         obsidian_path: str | None = None,
+        project_folder: str | None = None,
     ) -> str:
         """Add a new project. Returns confirmation message."""
         try:
@@ -30,6 +31,7 @@ class ProjectService:
                 rtm_tag=rtm_tag,
                 obsidian_vault=obsidian_vault,
                 obsidian_path=obsidian_path,
+                project_folder=project_folder,
             )
             return f"Project '{project.name}' created."
         except Exception as e:
@@ -126,9 +128,25 @@ class ProjectService:
             return f"Error reading note: {e}"
 
         rtm_tag = self.extract_rtm_tag(content)
+        project_folder = self.extract_field(content, "Projektordner")
+
+        updates: dict[str, str] = {}
         if rtm_tag:
-            self._db.update_project(project_name, rtm_tag=rtm_tag)
-            return f"Project '{project_name}' synced. RTM tag: {rtm_tag}"
+            updates["rtm_tag"] = rtm_tag
+        if project_folder:
+            updates["project_folder"] = project_folder
+
+        if updates:
+            self._db.update_project(project_name, **updates)
+
+        parts: list[str] = []
+        if rtm_tag:
+            parts.append(f"RTM tag: {rtm_tag}")
+        if project_folder:
+            parts.append(f"Project folder: {project_folder}")
+
+        if parts:
+            return f"Project '{project_name}' synced. {', '.join(parts)}"
         return f"No RTM tag found in note for project '{project_name}'."
 
     def list_projects(self) -> str:
@@ -141,6 +159,7 @@ class ProjectService:
                 "rtm_tag": p.rtm_tag or "",
                 "obsidian_vault": p.obsidian_vault or "",
                 "obsidian_path": p.obsidian_path or "",
+                "project_folder": p.project_folder or "",
             }
             synonyms = self._db.get_synonyms_for_project(p.id)
             if synonyms:
@@ -156,15 +175,20 @@ class ProjectService:
             parts.append(f"RTM Tag: {project.rtm_tag}")
         if project.obsidian_vault:
             parts.append(f"Obsidian: {project.obsidian_vault}/{project.obsidian_path}")
+        if project.project_folder:
+            parts.append(f"Project Folder: {project.project_folder}")
         if synonyms:
             parts.append(f"Synonyms: {', '.join(synonyms)}")
         return "\n".join(parts)
 
     @staticmethod
     def fill_template_fields(
-        template_content: str, customer_name: str, rtm_tag: str,
+        template_content: str,
+        customer_name: str,
+        rtm_tag: str,
+        project_folder: str | None = None,
     ) -> str:
-        """Fill Kundenprojektname and RTM Tag fields in an Obsidian template."""
+        """Fill Kundenprojektname, RTM Tag, and Projektordner fields in an Obsidian template."""
         result = re.sub(
             r"(\*\*Kundenprojektname\*\*\s*\n)\s*\n",
             rf"\g<1>{customer_name}\n\n",
@@ -177,6 +201,13 @@ class ProjectService:
             result,
             count=1,
         )
+        if project_folder:
+            result = re.sub(
+                r"(\*\*Projektordner\*\*\s*\n)\s*\n",
+                rf"\g<1>{project_folder}\n\n",
+                result,
+                count=1,
+            )
         return result
 
     @staticmethod

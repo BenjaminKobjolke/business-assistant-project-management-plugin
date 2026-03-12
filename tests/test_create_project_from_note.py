@@ -77,6 +77,7 @@ class TestPmCreateProjectFromNote:
         assert project.rtm_tag == "#p_acme"
         assert project.obsidian_vault == "XIDA"
         assert project.obsidian_path == "XD - Projects/2026/acme_project.md"
+        assert project.project_folder == "ACME_Folder"
 
     def test_missing_obsidian_service(self, db: PmDatabase) -> None:
         self._setup_settings(db)

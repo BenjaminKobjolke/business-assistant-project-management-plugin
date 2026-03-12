@@ -4,24 +4,29 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime
+from pathlib import PurePosixPath
 
 from business_assistant.agent.deps import Deps
 from pydantic_ai import RunContext
 
 from .constants import (
+    ERR_FILESYSTEM_NOT_LOADED,
     ERR_NOTE_CREATION_FAILED,
     ERR_OBSIDIAN_NOT_LOADED,
+    ERR_PROJECT_NO_FOLDER,
     ERR_PROJECT_NOT_FOUND,
     ERR_TEMPLATE_READ_FAILED,
     PLUGIN_DATA_PM_DATABASE,
     REQUIRED_SETTINGS_CREATE_PROJECT,
     REQUIRED_SETTINGS_FROM_NOTE,
+    SETTING_PROJECT_FILES_BASE_PATH,
     SETTING_PROJECT_FOLDER_PATH,
     SETTING_PROJECT_TEMPLATE_PATH,
     SETTING_PROJECT_VAULT,
 )
 from .database import PmDatabase
-from .plugin_helpers import _get_obsidian_service, _require_setting
+from .plugin_helpers import _get_filesystem_service, _get_obsidian_service, _require_setting
 from .project_service import ProjectService
 
 logger = logging.getLogger(__name__)
@@ -45,6 +50,7 @@ def pm_add_project(
     rtm_tag: str = "",
     obsidian_vault: str = "",
     obsidian_path: str = "",
+    project_folder: str = "",
 ) -> str:
     """Create a new project. If vault+path provided, auto-extracts RTM tag from note."""
     logger.info("pm_add_project: name=%r", name)
@@ -70,6 +76,7 @@ def pm_add_project(
         rtm_tag=effective_rtm_tag,
         obsidian_vault=obsidian_vault or None,
         obsidian_path=obsidian_path or None,
+        project_folder=project_folder or None,
     )
 
 
@@ -126,6 +133,7 @@ def pm_create_project(
     rtm_tag: str,
     project_name: str,
     synonyms: str = "",
+    project_folder: str = "",
 ) -> str:
     """Create a new project from Obsidian template.
 
@@ -138,6 +146,7 @@ def pm_create_project(
         rtm_tag: RTM tag (e.g., #p_project_name).
         project_name: Display name for the project in the PM database.
         synonyms: Optional comma-separated alternative names.
+        project_folder: Optional Projektordner name for file storage.
     """
     logger.info("pm_create_project: project=%r filename=%r", project_name, filename)
 
@@ -170,7 +179,9 @@ def pm_create_project(
 
     # 4. Fill template fields
     proj_svc = ProjectService(db)
-    filled_content = proj_svc.fill_template_fields(template_content, customer_name, rtm_tag)
+    filled_content = proj_svc.fill_template_fields(
+        template_content, customer_name, rtm_tag, project_folder or None,
+    )
 
     # 5. Build target path
     target_path = proj_svc.build_project_note_path(folder_path, filename)
@@ -187,6 +198,7 @@ def pm_create_project(
         rtm_tag=rtm_tag,
         obsidian_vault=vault,
         obsidian_path=target_path,
+        project_folder=project_folder or None,
     )
 
     # 8. Add synonyms if provided
@@ -241,9 +253,10 @@ def pm_create_project_from_note(
     except Exception as e:
         return f"ERROR: Failed to read note: {e}"
 
-    # 4. Extract RTM tag
+    # 4. Extract RTM tag and project folder
     proj_svc = ProjectService(db)
     rtm_tag = proj_svc.extract_rtm_tag(content)
+    project_folder = proj_svc.extract_field(content, "Projektordner")
 
     # 5. Suggest synonyms
     suggestions = proj_svc.suggest_synonyms(content, note_path)
@@ -254,6 +267,7 @@ def pm_create_project_from_note(
         rtm_tag=rtm_tag,
         obsidian_vault=vault,
         obsidian_path=note_path,
+        project_folder=project_folder,
     )
 
     # 7. Build response
@@ -280,3 +294,66 @@ def pm_create_project_from_note(
         parts.append("To add synonyms, ask the user which ones to keep.")
 
     return "\n".join(parts)
+
+
+def pm_store_file_in_project(
+    ctx: RunContext[Deps],
+    project_name: str,
+    source_file_path: str,
+    source_type: str = "email",
+) -> str:
+    """Store a file in a project's Source folder.
+
+    Creates {base_path}/{project_folder}/Source/{YYYYMMDD}_{source_type}/
+    and copies the file there.
+
+    Args:
+        project_name: Project name or synonym to look up.
+        source_file_path: Absolute path to the file to copy.
+        source_type: Source category — "email" or "download".
+    """
+    logger.info(
+        "pm_store_file_in_project: project=%r source=%r type=%r",
+        project_name, source_file_path, source_type,
+    )
+
+    # 1. Get filesystem service
+    filesystem_service = _get_filesystem_service(ctx)
+    if not filesystem_service:
+        return ERR_FILESYSTEM_NOT_LOADED
+
+    # 2. Find project
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    project = proj_svc.find_project(project_name)
+    if not project:
+        return ERR_PROJECT_NOT_FOUND.format(reference=project_name)
+
+    # 3. Check project folder
+    if not project.project_folder:
+        return ERR_PROJECT_NO_FOLDER.format(name=project.name)
+
+    # 4. Get base path setting
+    err = _require_setting(db, SETTING_PROJECT_FILES_BASE_PATH)
+    if err:
+        return err
+    base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
+    assert base_path is not None
+
+    # 5. Build target directory
+    date_str = datetime.now(tz=UTC).strftime("%Y%m%d")
+    target_dir = f"{base_path}/{project.project_folder}/Source/{date_str}_{source_type}"
+
+    # 6. Create directory
+    dir_result = filesystem_service.create_directory(target_dir)
+    if not dir_result.startswith("{"):
+        return dir_result
+
+    # 7. Build target file path and copy
+    filename = PurePosixPath(source_file_path).name
+    target_file = f"{target_dir}/{filename}"
+    copy_result = filesystem_service.copy_file(source_file_path, target_file)
+    if not copy_result.startswith("{"):
+        return copy_result
+
+    return f"File stored: {target_file}"

@@ -16,7 +16,7 @@ class TestPluginRegistration:
         registry = PluginRegistry()
         register(registry)
 
-        assert len(registry.all_tools()) == 26
+        assert len(registry.all_tools()) == 27
         assert len(registry.plugins) == 1
         assert registry.plugins[0].name == "project_management"
         assert registry.plugins[0].category == "project_management"
@@ -32,6 +32,7 @@ class TestPluginRegistration:
         assert "email" in plugin_info.required_categories
         assert "notes" in plugin_info.required_categories
         assert "calendar" in plugin_info.required_categories
+        assert "filesystem" in plugin_info.required_categories
 
     @patch("business_assistant_pm.plugin.PmDatabase")
     def test_register_system_prompt(self, mock_db_cls, monkeypatch) -> None:
@@ -76,6 +77,7 @@ class TestPluginRegistration:
             "pm_add_project_synonym",
             "pm_match_project",
             "pm_sync_project_from_obsidian",
+            "pm_store_file_in_project",
             "pm_set_setting",
             "pm_get_settings",
             "pm_list_tracking",

@@ -31,6 +31,7 @@ from .tools_project import (
     pm_create_project_from_note,
     pm_list_projects,
     pm_match_project,
+    pm_store_file_in_project,
     pm_sync_project_from_obsidian,
 )
 from .tools_settings import (
@@ -82,6 +83,7 @@ def register(registry: PluginRegistry) -> None:
         Tool(pm_add_project_synonym, name="pm_add_project_synonym"),
         Tool(pm_match_project, name="pm_match_project"),
         Tool(pm_sync_project_from_obsidian, name="pm_sync_project_from_obsidian"),
+        Tool(pm_store_file_in_project, name="pm_store_file_in_project"),
         Tool(pm_set_setting, name="pm_set_setting"),
         Tool(pm_get_settings, name="pm_get_settings"),
         Tool(pm_list_tracking, name="pm_list_tracking"),

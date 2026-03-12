@@ -8,6 +8,7 @@ from pydantic_ai import RunContext
 from .constants import (
     ERR_SETTING_MISSING,
     PLUGIN_DATA_EMAIL_SERVICE,
+    PLUGIN_DATA_FILESYSTEM_SERVICE,
     PLUGIN_DATA_OBSIDIAN_SERVICE,
     PLUGIN_DATA_RTM_SERVICE,
 )
@@ -27,6 +28,11 @@ def _get_email_service(ctx: RunContext[Deps]):
 def _get_obsidian_service(ctx: RunContext[Deps]):
     """Retrieve obsidian service from plugin_data."""
     return ctx.deps.plugin_data.get(PLUGIN_DATA_OBSIDIAN_SERVICE)
+
+
+def _get_filesystem_service(ctx: RunContext[Deps]):
+    """Retrieve filesystem service from plugin_data."""
+    return ctx.deps.plugin_data.get(PLUGIN_DATA_FILESYSTEM_SERVICE)
 
 
 def _require_setting(db: PmDatabase, key: str) -> str | None:

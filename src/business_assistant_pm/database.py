@@ -35,6 +35,7 @@ class PmProject(Base):
     rtm_tag: Mapped[str | None] = mapped_column(String, default=None)
     obsidian_vault: Mapped[str | None] = mapped_column(String, default=None)
     obsidian_path: Mapped[str | None] = mapped_column(String, default=None)
+    project_folder: Mapped[str | None] = mapped_column(String, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC),
     )
@@ -157,6 +158,7 @@ class PmDatabase:
         rtm_tag: str | None = None,
         obsidian_vault: str | None = None,
         obsidian_path: str | None = None,
+        project_folder: str | None = None,
     ) -> PmProject:
         """Add a new project."""
         with self._open() as session:
@@ -165,6 +167,7 @@ class PmDatabase:
                 rtm_tag=rtm_tag,
                 obsidian_vault=obsidian_vault,
                 obsidian_path=obsidian_path,
+                project_folder=project_folder,
                 created_at=datetime.now(UTC),
             )
             session.add(project)
@@ -215,6 +218,7 @@ class PmDatabase:
         rtm_tag: str | None = None,
         obsidian_vault: str | None = None,
         obsidian_path: str | None = None,
+        project_folder: str | None = None,
     ) -> bool:
         """Update project fields."""
         with self._open() as session:
@@ -231,6 +235,8 @@ class PmDatabase:
                 project.obsidian_vault = obsidian_vault
             if obsidian_path is not None:
                 project.obsidian_path = obsidian_path
+            if project_folder is not None:
+                project.project_folder = project_folder
             session.commit()
             return True
 
