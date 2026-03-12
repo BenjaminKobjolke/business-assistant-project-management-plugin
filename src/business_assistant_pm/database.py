@@ -1,0 +1,379 @@
+"""SQLAlchemy models and database operations for PM plugin."""
+
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime
+from pathlib import Path
+
+from sqlalchemy import DateTime, String, Text, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+
+logger = logging.getLogger(__name__)
+
+
+class Base(DeclarativeBase):
+    """SQLAlchemy declarative base."""
+
+
+class PmSettingRow(Base):
+    """Runtime settings (key-value store)."""
+
+    __tablename__ = "pm_settings"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+
+
+class PmProject(Base):
+    """Projects with metadata."""
+
+    __tablename__ = "pm_projects"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    rtm_tag: Mapped[str | None] = mapped_column(String, default=None)
+    obsidian_vault: Mapped[str | None] = mapped_column(String, default=None)
+    obsidian_path: Mapped[str | None] = mapped_column(String, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC),
+    )
+
+
+class PmProjectSynonym(Base):
+    """Project synonyms (case-insensitive)."""
+
+    __tablename__ = "pm_project_synonyms"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    synonym: Mapped[str] = mapped_column(String, unique=True)
+    project_id: Mapped[int] = mapped_column()
+
+
+class PmContact(Base):
+    """Delegation contacts."""
+
+    __tablename__ = "pm_contacts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    email: Mapped[str] = mapped_column(String)
+    rtm_list_tag: Mapped[str | None] = mapped_column(String, default=None)
+
+
+class PmTracking(Base):
+    """Email-task tracking records."""
+
+    __tablename__ = "pm_tracking"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    tracking_id: Mapped[str] = mapped_column(String, unique=True)
+    email_id: Mapped[str] = mapped_column(String)
+    email_folder: Mapped[str] = mapped_column(String)
+    email_subject: Mapped[str] = mapped_column(String, default="")
+    email_from: Mapped[str] = mapped_column(String, default="")
+    task_name: Mapped[str] = mapped_column(String, default="")
+    rtm_task_id: Mapped[str | None] = mapped_column(String, default=None)
+    delegated_to: Mapped[str | None] = mapped_column(String, default=None)
+    project_name: Mapped[str | None] = mapped_column(String, default=None)
+    status: Mapped[str] = mapped_column(String, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC),
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+
+
+class PmDatabase:
+    """Database operations for PM plugin."""
+
+    def __init__(self, db_path: str) -> None:
+        if db_path == ":memory:":
+            self._engine = create_engine("sqlite:///:memory:", echo=False)
+        else:
+            path = Path(db_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._engine = create_engine(f"sqlite:///{path}", echo=False)
+        Base.metadata.create_all(self._engine)
+        self._session_factory = sessionmaker(bind=self._engine, expire_on_commit=False)
+
+    def _open(self) -> Session:
+        """Open a new session."""
+        return self._session_factory()
+
+    # --- Settings ---
+
+    def get_setting(self, key: str) -> str | None:
+        """Get a setting value by key."""
+        with self._open() as session:
+            row = session.query(PmSettingRow).filter(PmSettingRow.key == key).first()
+            if row:
+                return row.value
+        return None
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Set a setting value (insert or update)."""
+        with self._open() as session:
+            existing = session.query(PmSettingRow).filter(PmSettingRow.key == key).first()
+            if existing:
+                existing.value = value
+            else:
+                session.add(PmSettingRow(key=key, value=value))
+            session.commit()
+
+    def get_all_settings(self) -> dict[str, str]:
+        """Get all settings as a dict."""
+        with self._open() as session:
+            rows = session.query(PmSettingRow).all()
+            return {row.key: row.value for row in rows}
+
+    # --- Projects ---
+
+    def add_project(
+        self,
+        name: str,
+        rtm_tag: str | None = None,
+        obsidian_vault: str | None = None,
+        obsidian_path: str | None = None,
+    ) -> PmProject:
+        """Add a new project."""
+        with self._open() as session:
+            project = PmProject(
+                name=name,
+                rtm_tag=rtm_tag,
+                obsidian_vault=obsidian_vault,
+                obsidian_path=obsidian_path,
+                created_at=datetime.now(UTC),
+            )
+            session.add(project)
+            session.commit()
+            session.expunge(project)
+            return project
+
+    def get_project_by_name(self, name: str) -> PmProject | None:
+        """Get a project by exact name (case-insensitive)."""
+        with self._open() as session:
+            project = (
+                session.query(PmProject)
+                .filter(PmProject.name.ilike(name))
+                .first()
+            )
+            if project:
+                session.expunge(project)
+            return project
+
+    def find_project_by_name_or_synonym(self, reference: str) -> PmProject | None:
+        """Find a project by name or synonym (case-insensitive)."""
+        # Try exact name match first
+        project = self.get_project_by_name(reference)
+        if project:
+            return project
+
+        # Try synonym match
+        with self._open() as session:
+            synonym = (
+                session.query(PmProjectSynonym)
+                .filter(PmProjectSynonym.synonym == reference.lower())
+                .first()
+            )
+            if synonym:
+                project = (
+                    session.query(PmProject)
+                    .filter(PmProject.id == synonym.project_id)
+                    .first()
+                )
+                if project:
+                    session.expunge(project)
+                    return project
+        return None
+
+    def update_project(
+        self,
+        name: str,
+        rtm_tag: str | None = None,
+        obsidian_vault: str | None = None,
+        obsidian_path: str | None = None,
+    ) -> bool:
+        """Update project fields."""
+        with self._open() as session:
+            project = (
+                session.query(PmProject)
+                .filter(PmProject.name.ilike(name))
+                .first()
+            )
+            if not project:
+                return False
+            if rtm_tag is not None:
+                project.rtm_tag = rtm_tag
+            if obsidian_vault is not None:
+                project.obsidian_vault = obsidian_vault
+            if obsidian_path is not None:
+                project.obsidian_path = obsidian_path
+            session.commit()
+            return True
+
+    def list_projects(self) -> list[PmProject]:
+        """List all projects."""
+        with self._open() as session:
+            projects = session.query(PmProject).all()
+            for p in projects:
+                session.expunge(p)
+            return projects
+
+    # --- Synonyms ---
+
+    def add_synonym(self, project_id: int, synonym: str) -> PmProjectSynonym:
+        """Add a synonym for a project."""
+        with self._open() as session:
+            row = PmProjectSynonym(
+                synonym=synonym.lower(),
+                project_id=project_id,
+            )
+            session.add(row)
+            session.commit()
+            session.expunge(row)
+            return row
+
+    def get_synonyms_for_project(self, project_id: int) -> list[str]:
+        """Get all synonyms for a project."""
+        with self._open() as session:
+            rows = (
+                session.query(PmProjectSynonym)
+                .filter(PmProjectSynonym.project_id == project_id)
+                .all()
+            )
+            return [r.synonym for r in rows]
+
+    # --- Contacts ---
+
+    def set_contact(
+        self, name: str, email: str, rtm_list_tag: str | None = None,
+    ) -> PmContact:
+        """Add or update a delegation contact."""
+        with self._open() as session:
+            existing = (
+                session.query(PmContact)
+                .filter(PmContact.name == name.lower())
+                .first()
+            )
+            if existing:
+                existing.email = email
+                if rtm_list_tag is not None:
+                    existing.rtm_list_tag = rtm_list_tag
+                session.commit()
+                session.expunge(existing)
+                return existing
+            contact = PmContact(
+                name=name.lower(),
+                email=email,
+                rtm_list_tag=rtm_list_tag,
+            )
+            session.add(contact)
+            session.commit()
+            session.expunge(contact)
+            return contact
+
+    def get_contact(self, name: str) -> PmContact | None:
+        """Get a contact by name (case-insensitive)."""
+        with self._open() as session:
+            contact = (
+                session.query(PmContact)
+                .filter(PmContact.name == name.lower())
+                .first()
+            )
+            if contact:
+                session.expunge(contact)
+            return contact
+
+    def list_contacts(self) -> list[PmContact]:
+        """List all contacts."""
+        with self._open() as session:
+            contacts = session.query(PmContact).all()
+            for c in contacts:
+                session.expunge(c)
+            return contacts
+
+    # --- Tracking ---
+
+    def create_tracking(
+        self,
+        tracking_id: str,
+        email_id: str,
+        email_folder: str,
+        email_subject: str = "",
+        email_from: str = "",
+        task_name: str = "",
+        rtm_task_id: str | None = None,
+        delegated_to: str | None = None,
+        project_name: str | None = None,
+    ) -> PmTracking:
+        """Create a new tracking record."""
+        with self._open() as session:
+            record = PmTracking(
+                tracking_id=tracking_id,
+                email_id=email_id,
+                email_folder=email_folder,
+                email_subject=email_subject,
+                email_from=email_from,
+                task_name=task_name,
+                rtm_task_id=rtm_task_id,
+                delegated_to=delegated_to,
+                project_name=project_name,
+                status="active",
+                created_at=datetime.now(UTC),
+            )
+            session.add(record)
+            session.commit()
+            session.expunge(record)
+            return record
+
+    def find_tracking_by_id(self, tracking_id: str) -> PmTracking | None:
+        """Find a tracking record by tracking ID."""
+        with self._open() as session:
+            record = (
+                session.query(PmTracking)
+                .filter(PmTracking.tracking_id == tracking_id)
+                .first()
+            )
+            if record:
+                session.expunge(record)
+            return record
+
+    def find_tracking_by_rtm_task_id(self, rtm_task_id: str) -> PmTracking | None:
+        """Find a tracking record by RTM task ID."""
+        with self._open() as session:
+            record = (
+                session.query(PmTracking)
+                .filter(PmTracking.rtm_task_id == rtm_task_id)
+                .first()
+            )
+            if record:
+                session.expunge(record)
+            return record
+
+    def complete_tracking(self, tracking_id: str) -> bool:
+        """Mark a tracking record as completed."""
+        with self._open() as session:
+            record = (
+                session.query(PmTracking)
+                .filter(PmTracking.tracking_id == tracking_id)
+                .first()
+            )
+            if not record:
+                return False
+            record.status = "completed"
+            record.completed_at = datetime.now(UTC)
+            session.commit()
+            return True
+
+    def list_tracking(
+        self, status: str = "active", delegated_to: str = "",
+    ) -> list[PmTracking]:
+        """List tracking records filtered by status and optional delegate."""
+        with self._open() as session:
+            query = session.query(PmTracking).filter(PmTracking.status == status)
+            if delegated_to:
+                query = query.filter(PmTracking.delegated_to == delegated_to.lower())
+            records = query.all()
+            for r in records:
+                session.expunge(r)
+            return records
