@@ -101,6 +101,103 @@ class TestSynonyms:
         assert synonyms == ["mixed"]
 
 
+class TestWorkflows:
+    def test_add_workflow(self, db: PmDatabase) -> None:
+        workflow = db.add_workflow("Inbox Zero", "Step 1: Check emails")
+        assert workflow.name == "Inbox Zero"
+        assert workflow.instructions == "Step 1: Check emails"
+        assert workflow.id is not None
+
+    def test_get_workflow_by_name(self, db: PmDatabase) -> None:
+        db.add_workflow("My Flow", "Do things")
+        workflow = db.get_workflow_by_name("My Flow")
+        assert workflow is not None
+        assert workflow.name == "My Flow"
+
+    def test_get_workflow_by_name_case_insensitive(self, db: PmDatabase) -> None:
+        db.add_workflow("My Flow", "Do things")
+        workflow = db.get_workflow_by_name("my flow")
+        assert workflow is not None
+        assert workflow.name == "My Flow"
+
+    def test_get_workflow_not_found(self, db: PmDatabase) -> None:
+        assert db.get_workflow_by_name("Nonexistent") is None
+
+    def test_find_by_name_or_synonym(self, db: PmDatabase) -> None:
+        workflow = db.add_workflow("Full Name", "instructions")
+        db.add_workflow_synonym(workflow.id, "alias")
+        found = db.find_workflow_by_name_or_synonym("alias")
+        assert found is not None
+        assert found.name == "Full Name"
+
+    def test_find_by_name_direct(self, db: PmDatabase) -> None:
+        db.add_workflow("Direct", "instructions")
+        found = db.find_workflow_by_name_or_synonym("Direct")
+        assert found is not None
+
+    def test_find_not_found(self, db: PmDatabase) -> None:
+        assert db.find_workflow_by_name_or_synonym("nope") is None
+
+    def test_update_workflow(self, db: PmDatabase) -> None:
+        db.add_workflow("Updatable", "old instructions")
+        result = db.update_workflow("Updatable", "new instructions")
+        assert result is True
+        workflow = db.get_workflow_by_name("Updatable")
+        assert workflow is not None
+        assert workflow.instructions == "new instructions"
+
+    def test_update_workflow_not_found(self, db: PmDatabase) -> None:
+        assert db.update_workflow("Ghost", "instructions") is False
+
+    def test_delete_workflow(self, db: PmDatabase) -> None:
+        workflow = db.add_workflow("Deletable", "instructions")
+        db.add_workflow_synonym(workflow.id, "del-alias")
+        result = db.delete_workflow("Deletable")
+        assert result is True
+        assert db.get_workflow_by_name("Deletable") is None
+        assert db.get_synonyms_for_workflow(workflow.id) == []
+
+    def test_delete_workflow_not_found(self, db: PmDatabase) -> None:
+        assert db.delete_workflow("Ghost") is False
+
+    def test_list_workflows(self, db: PmDatabase) -> None:
+        db.add_workflow("A", "instructions A")
+        db.add_workflow("B", "instructions B")
+        workflows = db.list_workflows()
+        assert len(workflows) == 2
+
+
+class TestWorkflowSynonyms:
+    def test_add_workflow_synonym(self, db: PmDatabase) -> None:
+        workflow = db.add_workflow("Flow", "instructions")
+        synonym = db.add_workflow_synonym(workflow.id, "Alias")
+        assert synonym.synonym == "alias"
+        assert synonym.workflow_id == workflow.id
+
+    def test_get_synonyms_for_workflow(self, db: PmDatabase) -> None:
+        workflow = db.add_workflow("Flow", "instructions")
+        db.add_workflow_synonym(workflow.id, "One")
+        db.add_workflow_synonym(workflow.id, "Two")
+        synonyms = db.get_synonyms_for_workflow(workflow.id)
+        assert set(synonyms) == {"one", "two"}
+
+    def test_synonym_stored_lowercase(self, db: PmDatabase) -> None:
+        workflow = db.add_workflow("Flow", "instructions")
+        db.add_workflow_synonym(workflow.id, "MiXeD")
+        synonyms = db.get_synonyms_for_workflow(workflow.id)
+        assert synonyms == ["mixed"]
+
+    def test_delete_workflow_synonym(self, db: PmDatabase) -> None:
+        workflow = db.add_workflow("Flow", "instructions")
+        db.add_workflow_synonym(workflow.id, "removable")
+        result = db.delete_workflow_synonym("removable")
+        assert result is True
+        assert db.get_synonyms_for_workflow(workflow.id) == []
+
+    def test_delete_workflow_synonym_not_found(self, db: PmDatabase) -> None:
+        assert db.delete_workflow_synonym("ghost") is False
+
+
 class TestContacts:
     def test_set_contact(self, db: PmDatabase) -> None:
         contact = db.set_contact("Alice", "alice@example.com", "#alice_list")

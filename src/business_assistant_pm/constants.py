@@ -81,6 +81,8 @@ ERR_PROJECT_NOT_FOUND = "ERROR: Project '{reference}' not found."
 ERR_TRACKING_NOT_FOUND = "ERROR: Tracking record '{tracking_id}' not found."
 ERR_TEMPLATE_READ_FAILED = "ERROR: Failed to read project template: {error}"
 ERR_NOTE_CREATION_FAILED = "ERROR: Failed to create project note: {error}"
+ERR_WORKFLOW_NOT_FOUND = "ERROR: Workflow '{reference}' not found."
+ERR_WORKFLOW_SYNONYM_NOT_FOUND = "ERROR: Workflow synonym '{synonym}' not found."
 
 # System prompt extra
 SYSTEM_PROMPT_PM = """\
@@ -143,6 +145,17 @@ Requires setting: project_vault.
 ## Delegation Email Format
 Subject uses RTM Smart Add: "Topic !priority ^due #project_tag #contact_list_tag"
 Body: original content + [PM-TRACK:<uuid>]
+
+## Workflows
+- pm_add_workflow: Create a reusable named workflow with AI instructions and optional synonyms
+- pm_update_workflow: Update the instructions of an existing workflow
+- pm_delete_workflow: Delete a workflow and all its synonyms
+- pm_add_workflow_synonym / pm_remove_workflow_synonym: Manage alternative trigger phrases
+- pm_list_workflows: List all workflows as JSON
+- pm_run_workflow: Look up a workflow by name or synonym and return its instructions
+
+When pm_run_workflow returns instructions, follow them step by step using the available tools.
+Workflows are reusable multi-step processes defined by the user.
 
 ## Missing Settings Behavior
 If a required setting is missing, the tool returns an error message telling you exactly

@@ -16,7 +16,7 @@ class TestPluginRegistration:
         registry = PluginRegistry()
         register(registry)
 
-        assert len(registry.all_tools()) == 19
+        assert len(registry.all_tools()) == 26
         assert len(registry.plugins) == 1
         assert registry.plugins[0].name == "project_management"
         assert registry.plugins[0].category == "project_management"
@@ -80,5 +80,12 @@ class TestPluginRegistration:
             "pm_get_settings",
             "pm_list_tracking",
             "pm_get_tracking",
+            "pm_add_workflow",
+            "pm_update_workflow",
+            "pm_delete_workflow",
+            "pm_add_workflow_synonym",
+            "pm_remove_workflow_synonym",
+            "pm_list_workflows",
+            "pm_run_workflow",
         }
         assert tool_names == expected

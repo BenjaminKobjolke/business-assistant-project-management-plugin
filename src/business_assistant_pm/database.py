@@ -50,6 +50,29 @@ class PmProjectSynonym(Base):
     project_id: Mapped[int] = mapped_column()
 
 
+class PmWorkflow(Base):
+    """Reusable named workflows with AI instructions."""
+
+    __tablename__ = "pm_workflows"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    instructions: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC),
+    )
+
+
+class PmWorkflowSynonym(Base):
+    """Workflow synonyms (case-insensitive)."""
+
+    __tablename__ = "pm_workflow_synonyms"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    synonym: Mapped[str] = mapped_column(String, unique=True)
+    workflow_id: Mapped[int] = mapped_column()
+
+
 class PmContact(Base):
     """Delegation contacts."""
 
@@ -242,6 +265,133 @@ class PmDatabase:
                 .all()
             )
             return [r.synonym for r in rows]
+
+    # --- Workflows ---
+
+    def add_workflow(self, name: str, instructions: str) -> PmWorkflow:
+        """Add a new workflow."""
+        with self._open() as session:
+            workflow = PmWorkflow(
+                name=name,
+                instructions=instructions,
+                created_at=datetime.now(UTC),
+            )
+            session.add(workflow)
+            session.commit()
+            session.expunge(workflow)
+            return workflow
+
+    def get_workflow_by_name(self, name: str) -> PmWorkflow | None:
+        """Get a workflow by exact name (case-insensitive)."""
+        with self._open() as session:
+            workflow = (
+                session.query(PmWorkflow)
+                .filter(PmWorkflow.name.ilike(name))
+                .first()
+            )
+            if workflow:
+                session.expunge(workflow)
+            return workflow
+
+    def find_workflow_by_name_or_synonym(self, reference: str) -> PmWorkflow | None:
+        """Find a workflow by name or synonym (case-insensitive)."""
+        workflow = self.get_workflow_by_name(reference)
+        if workflow:
+            return workflow
+
+        with self._open() as session:
+            synonym = (
+                session.query(PmWorkflowSynonym)
+                .filter(PmWorkflowSynonym.synonym == reference.lower())
+                .first()
+            )
+            if synonym:
+                workflow = (
+                    session.query(PmWorkflow)
+                    .filter(PmWorkflow.id == synonym.workflow_id)
+                    .first()
+                )
+                if workflow:
+                    session.expunge(workflow)
+                    return workflow
+        return None
+
+    def update_workflow(self, name: str, instructions: str) -> bool:
+        """Update workflow instructions."""
+        with self._open() as session:
+            workflow = (
+                session.query(PmWorkflow)
+                .filter(PmWorkflow.name.ilike(name))
+                .first()
+            )
+            if not workflow:
+                return False
+            workflow.instructions = instructions
+            session.commit()
+            return True
+
+    def delete_workflow(self, name: str) -> bool:
+        """Delete a workflow and its synonyms."""
+        with self._open() as session:
+            workflow = (
+                session.query(PmWorkflow)
+                .filter(PmWorkflow.name.ilike(name))
+                .first()
+            )
+            if not workflow:
+                return False
+            session.query(PmWorkflowSynonym).filter(
+                PmWorkflowSynonym.workflow_id == workflow.id,
+            ).delete()
+            session.delete(workflow)
+            session.commit()
+            return True
+
+    def list_workflows(self) -> list[PmWorkflow]:
+        """List all workflows."""
+        with self._open() as session:
+            workflows = session.query(PmWorkflow).all()
+            for w in workflows:
+                session.expunge(w)
+            return workflows
+
+    # --- Workflow Synonyms ---
+
+    def add_workflow_synonym(self, workflow_id: int, synonym: str) -> PmWorkflowSynonym:
+        """Add a synonym for a workflow."""
+        with self._open() as session:
+            row = PmWorkflowSynonym(
+                synonym=synonym.lower(),
+                workflow_id=workflow_id,
+            )
+            session.add(row)
+            session.commit()
+            session.expunge(row)
+            return row
+
+    def get_synonyms_for_workflow(self, workflow_id: int) -> list[str]:
+        """Get all synonyms for a workflow."""
+        with self._open() as session:
+            rows = (
+                session.query(PmWorkflowSynonym)
+                .filter(PmWorkflowSynonym.workflow_id == workflow_id)
+                .all()
+            )
+            return [r.synonym for r in rows]
+
+    def delete_workflow_synonym(self, synonym: str) -> bool:
+        """Delete a workflow synonym."""
+        with self._open() as session:
+            row = (
+                session.query(PmWorkflowSynonym)
+                .filter(PmWorkflowSynonym.synonym == synonym.lower())
+                .first()
+            )
+            if not row:
+                return False
+            session.delete(row)
+            session.commit()
+            return True
 
     # --- Contacts ---
 

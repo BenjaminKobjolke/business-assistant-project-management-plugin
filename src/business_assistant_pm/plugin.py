@@ -44,6 +44,15 @@ from .tools_tracking import (
     pm_create_todo_from_email,
     pm_handle_completed_email,
 )
+from .tools_workflow import (
+    pm_add_workflow,
+    pm_add_workflow_synonym,
+    pm_delete_workflow,
+    pm_list_workflows,
+    pm_remove_workflow_synonym,
+    pm_run_workflow,
+    pm_update_workflow,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +86,13 @@ def register(registry: PluginRegistry) -> None:
         Tool(pm_get_settings, name="pm_get_settings"),
         Tool(pm_list_tracking, name="pm_list_tracking"),
         Tool(pm_get_tracking, name="pm_get_tracking"),
+        Tool(pm_add_workflow, name="pm_add_workflow"),
+        Tool(pm_update_workflow, name="pm_update_workflow"),
+        Tool(pm_delete_workflow, name="pm_delete_workflow"),
+        Tool(pm_add_workflow_synonym, name="pm_add_workflow_synonym"),
+        Tool(pm_remove_workflow_synonym, name="pm_remove_workflow_synonym"),
+        Tool(pm_list_workflows, name="pm_list_workflows"),
+        Tool(pm_run_workflow, name="pm_run_workflow"),
     ]
 
     info = PluginInfo(
