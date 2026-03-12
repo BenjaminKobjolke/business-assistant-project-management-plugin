@@ -51,6 +51,17 @@ class PmProjectSynonym(Base):
     project_id: Mapped[int] = mapped_column()
 
 
+class PmProjectMatchRule(Base):
+    """Project matching rules for email-to-project matching."""
+
+    __tablename__ = "pm_project_match_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column()
+    rule_type: Mapped[str] = mapped_column(String)  # email_domain|contact|project_number|keyword
+    value: Mapped[str] = mapped_column(String)  # stored lowercase
+
+
 class PmWorkflow(Base):
     """Reusable named workflows with AI instructions."""
 
@@ -334,6 +345,88 @@ class PmDatabase:
             session.delete(row)
             session.commit()
             return True
+
+    # --- Match Rules ---
+
+    def add_match_rule(
+        self, project_id: int, rule_type: str, value: str,
+    ) -> PmProjectMatchRule:
+        """Add a match rule for a project. Idempotent."""
+        lower_value = value.lower()
+        with self._open() as session:
+            existing = (
+                session.query(PmProjectMatchRule)
+                .filter(
+                    PmProjectMatchRule.project_id == project_id,
+                    PmProjectMatchRule.rule_type == rule_type,
+                    PmProjectMatchRule.value == lower_value,
+                )
+                .first()
+            )
+            if existing:
+                session.expunge(existing)
+                return existing
+            row = PmProjectMatchRule(
+                project_id=project_id,
+                rule_type=rule_type,
+                value=lower_value,
+            )
+            session.add(row)
+            session.commit()
+            session.expunge(row)
+            return row
+
+    def get_match_rules_for_project(self, project_id: int) -> list[PmProjectMatchRule]:
+        """Get all match rules for a project."""
+        with self._open() as session:
+            rows = (
+                session.query(PmProjectMatchRule)
+                .filter(PmProjectMatchRule.project_id == project_id)
+                .all()
+            )
+            for r in rows:
+                session.expunge(r)
+            return rows
+
+    def get_all_match_rules(self) -> list[PmProjectMatchRule]:
+        """Get all match rules across all projects."""
+        with self._open() as session:
+            rows = session.query(PmProjectMatchRule).all()
+            for r in rows:
+                session.expunge(r)
+            return rows
+
+    def delete_match_rule(
+        self, project_id: int, rule_type: str, value: str,
+    ) -> bool:
+        """Delete a specific match rule."""
+        lower_value = value.lower()
+        with self._open() as session:
+            row = (
+                session.query(PmProjectMatchRule)
+                .filter(
+                    PmProjectMatchRule.project_id == project_id,
+                    PmProjectMatchRule.rule_type == rule_type,
+                    PmProjectMatchRule.value == lower_value,
+                )
+                .first()
+            )
+            if not row:
+                return False
+            session.delete(row)
+            session.commit()
+            return True
+
+    def delete_match_rules_for_project(self, project_id: int) -> int:
+        """Delete all match rules for a project. Returns count deleted."""
+        with self._open() as session:
+            count = (
+                session.query(PmProjectMatchRule)
+                .filter(PmProjectMatchRule.project_id == project_id)
+                .delete()
+            )
+            session.commit()
+            return count
 
     # --- Workflows ---
 

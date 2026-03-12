@@ -45,6 +45,18 @@ NOTE_CONTENT = (
     "## Details\n"
 )
 
+NOTE_CONTENT_WITH_MATCHING = (
+    "# Project\n\n"
+    "**Kundenprojektname**\n\nACME Corp\n\n"
+    "**Projektordner**\n\nACME_Folder\n\n"
+    "**RTM Tag**\n\n#p_acme\n\n"
+    "**Matching**\n"
+    "email_domains: acme.com, acme.de\n"
+    "project_numbers: 260086\n"
+    "keywords: ACME Widget\n"
+    "\n**Other**\n"
+)
+
 
 class TestPmCreateProjectFromNote:
     def _setup_settings(self, db: PmDatabase) -> None:
@@ -170,6 +182,54 @@ class TestPmCreateProjectFromNote:
 
         assert "Folder created: Y:/ACME_Folder" in result
         filesystem.create_directory.assert_called_once_with("Y:/ACME_Folder")
+
+    def test_note_with_matching_section(self, db: PmDatabase) -> None:
+        self._setup_settings(db)
+
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps(
+            {"content": NOTE_CONTENT_WITH_MATCHING},
+        )
+
+        ctx = _make_ctx(db, obsidian)
+        result = pm_create_project_from_note(
+            ctx,
+            note_path="XD - Projects/2026/acme.md",
+            project_name="ACME",
+        )
+
+        assert "Match rules imported: 4" in result
+
+        # Verify rules in DB
+        project = db.get_project_by_name("ACME")
+        assert project is not None
+        rules = db.get_match_rules_for_project(project.id)
+        rule_types = {r.rule_type for r in rules}
+        assert "email_domain" in rule_types
+        assert "project_number" in rule_types
+        assert "keyword" in rule_types
+        values = {r.value for r in rules}
+        assert "acme.com" in values
+        assert "260086" in values
+
+    def test_note_without_matching_section(self, db: PmDatabase) -> None:
+        self._setup_settings(db)
+
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": NOTE_CONTENT})
+
+        ctx = _make_ctx(db, obsidian)
+        result = pm_create_project_from_note(
+            ctx,
+            note_path="XD - Projects/2026/acme.md",
+            project_name="ACME",
+        )
+
+        assert "created" in result
+        assert "Match rules imported" not in result
+        project = db.get_project_by_name("ACME")
+        assert project is not None
+        assert len(db.get_match_rules_for_project(project.id)) == 0
 
     def test_project_folder_no_filesystem_skips_gracefully(self, db: PmDatabase) -> None:
         self._setup_settings(db)

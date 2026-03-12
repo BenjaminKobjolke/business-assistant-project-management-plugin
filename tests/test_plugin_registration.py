@@ -16,7 +16,7 @@ class TestPluginRegistration:
         registry = PluginRegistry()
         register(registry)
 
-        assert len(registry.all_tools()) == 29
+        assert len(registry.all_tools()) == 34
         assert len(registry.plugins) == 1
         assert registry.plugins[0].name == "project_management"
         assert registry.plugins[0].category == "project_management"
@@ -91,5 +91,10 @@ class TestPluginRegistration:
             "pm_list_workflows",
             "pm_run_workflow",
             "pm_check_synonym_conflicts",
+            "pm_add_project_match_info",
+            "pm_remove_project_match_info",
+            "pm_list_project_match_info",
+            "pm_match_email_to_project",
+            "pm_update_project",
         }
         assert tool_names == expected

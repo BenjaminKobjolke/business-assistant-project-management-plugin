@@ -11,7 +11,11 @@ from pydantic_ai import RunContext
 from business_assistant_pm.constants import PLUGIN_DATA_PM_DATABASE
 from business_assistant_pm.database import PmDatabase
 from business_assistant_pm.project_service import ProjectService
-from business_assistant_pm.tools_project import pm_add_project_synonym, pm_remove_project_synonym
+from business_assistant_pm.tools_project import (
+    pm_add_project_synonym,
+    pm_remove_project_synonym,
+    pm_update_project,
+)
 
 
 class TestProjectService:
@@ -146,6 +150,53 @@ class TestProjectService:
         assert project.project_folder == "Folder123"
 
 
+class TestSyncFromObsidianMatchRules:
+    def test_sync_parses_match_rules(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("Test", obsidian_vault="vault", obsidian_path="test.md")
+
+        content = (
+            "**RTM Tag**\n\n#p_test\n\n"
+            "**Matching**\n"
+            "email_domains: test.com\n"
+            "keywords: widget\n"
+        )
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": content})
+
+        result = svc.sync_from_obsidian("Test", obsidian, "vault", "test.md")
+        assert "Match rules: 2" in result
+
+        project = db.get_project_by_name("Test")
+        assert project is not None
+        rules = db.get_match_rules_for_project(project.id)
+        assert len(rules) == 2
+
+    def test_sync_replaces_existing_rules(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("Test", obsidian_vault="vault", obsidian_path="test.md")
+        project = db.get_project_by_name("Test")
+        assert project is not None
+
+        # Add pre-existing rules
+        db.add_match_rule(project.id, "email_domain", "old.com")
+        db.add_match_rule(project.id, "keyword", "oldword")
+
+        content = (
+            "**RTM Tag**\n\n#p_test\n\n"
+            "**Matching**\n"
+            "email_domains: new.com\n"
+        )
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": content})
+
+        svc.sync_from_obsidian("Test", obsidian, "vault", "test.md")
+
+        rules = db.get_match_rules_for_project(project.id)
+        assert len(rules) == 1
+        assert rules[0].value == "new.com"
+
+
 class TestExtractField:
     def test_extract_kundenprojektname(self) -> None:
         content = "# Project\n\n**Kundenprojektname**\n\nACME Corp\n\n**RTM Tag**\n"
@@ -272,6 +323,50 @@ def _make_ctx(db: PmDatabase) -> RunContext[Deps]:
     ctx = MagicMock(spec=RunContext)
     ctx.deps = deps
     return ctx
+
+
+class TestPmUpdateProject:
+    def test_update_project_folder(self, db: PmDatabase) -> None:
+        db.add_project("MyProject")
+        ctx = _make_ctx(db)
+        result = pm_update_project(ctx, "MyProject", project_folder="NewFolder")
+        assert "updated" in result
+        assert "project_folder='NewFolder'" in result
+        project = db.get_project_by_name("MyProject")
+        assert project is not None
+        assert project.project_folder == "NewFolder"
+
+    def test_update_rtm_tag(self, db: PmDatabase) -> None:
+        db.add_project("MyProject")
+        ctx = _make_ctx(db)
+        result = pm_update_project(ctx, "MyProject", rtm_tag="#new_tag")
+        assert "updated" in result
+        project = db.get_project_by_name("MyProject")
+        assert project is not None
+        assert project.rtm_tag == "#new_tag"
+
+    def test_update_project_not_found(self, db: PmDatabase) -> None:
+        ctx = _make_ctx(db)
+        result = pm_update_project(ctx, "Ghost", project_folder="X")
+        assert "not found" in result
+
+    def test_update_no_fields(self, db: PmDatabase) -> None:
+        db.add_project("MyProject")
+        ctx = _make_ctx(db)
+        result = pm_update_project(ctx, "MyProject")
+        assert "No fields to update" in result
+
+    def test_update_multiple_fields(self, db: PmDatabase) -> None:
+        db.add_project("MyProject")
+        ctx = _make_ctx(db)
+        result = pm_update_project(
+            ctx, "MyProject", rtm_tag="#tag", project_folder="Folder",
+        )
+        assert "updated" in result
+        project = db.get_project_by_name("MyProject")
+        assert project is not None
+        assert project.rtm_tag == "#tag"
+        assert project.project_folder == "Folder"
 
 
 class TestPmRemoveProjectSynonym:

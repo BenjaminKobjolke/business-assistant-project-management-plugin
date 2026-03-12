@@ -13,6 +13,7 @@ from pydantic_ai import RunContext
 
 from .constants import (
     ERR_FILESYSTEM_NOT_LOADED,
+    ERR_INVALID_MATCH_RULE_TYPE,
     ERR_NOTE_CREATION_FAILED,
     ERR_OBSIDIAN_NOT_LOADED,
     ERR_PROJECT_NO_FOLDER,
@@ -25,6 +26,7 @@ from .constants import (
     SETTING_PROJECT_FOLDER_PATH,
     SETTING_PROJECT_TEMPLATE_PATH,
     SETTING_PROJECT_VAULT,
+    VALID_MATCH_RULE_TYPES,
 )
 from .database import PmDatabase
 from .plugin_helpers import _get_filesystem_service, _get_obsidian_service, _require_setting
@@ -103,6 +105,57 @@ def pm_add_project(
                 filesystem_service.create_directory(folder_path_full)
 
     return result
+
+
+def pm_update_project(
+    ctx: RunContext[Deps],
+    name: str,
+    rtm_tag: str = "",
+    obsidian_vault: str = "",
+    obsidian_path: str = "",
+    project_folder: str = "",
+) -> str:
+    """Update fields on an existing project. Only provided (non-empty) fields are changed.
+
+    Args:
+        name: The project name to update (must already exist).
+        rtm_tag: New RTM tag value.
+        obsidian_vault: New Obsidian vault name.
+        obsidian_path: New Obsidian note path.
+        project_folder: New project folder name or path.
+    """
+    logger.info("pm_update_project: name=%r", name)
+    db = _get_db(ctx)
+    project = db.get_project_by_name(name)
+    if not project:
+        return ERR_PROJECT_NOT_FOUND.format(reference=name)
+
+    kwargs: dict[str, str] = {}
+    if rtm_tag:
+        kwargs["rtm_tag"] = rtm_tag
+    if obsidian_vault:
+        kwargs["obsidian_vault"] = obsidian_vault
+    if obsidian_path:
+        kwargs["obsidian_path"] = obsidian_path
+    if project_folder:
+        kwargs["project_folder"] = project_folder
+
+    if not kwargs:
+        return f"No fields to update for project '{name}'."
+
+    db.update_project(name, **kwargs)
+
+    # Create project folder on disk if project_folder was updated
+    if project_folder:
+        filesystem_service = _get_filesystem_service(ctx)
+        if filesystem_service:
+            base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
+            if base_path:
+                folder_path_full = _resolve_project_folder(base_path, project_folder)
+                filesystem_service.create_directory(folder_path_full)
+
+    updated_fields = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
+    return f"Project '{name}' updated: {updated_fields}"
 
 
 def pm_add_project_synonym(
@@ -322,7 +375,17 @@ def pm_create_project_from_note(
         project_folder=project_folder,
     )
 
-    # 7. Create project folder on disk if extracted (best-effort)
+    # 7. Extract and store match rules
+    match_rules = proj_svc.extract_matching_section(content)
+    project_obj = db.get_project_by_name(project_name)
+    rules_count = 0
+    if project_obj and match_rules:
+        for rule_type, values in match_rules.items():
+            for value in values:
+                db.add_match_rule(project_obj.id, rule_type, value)
+                rules_count += 1
+
+    # 8. Create project folder on disk if extracted (best-effort)
     folder_created = ""
     if project_folder:
         filesystem_service = _get_filesystem_service(ctx)
@@ -334,7 +397,7 @@ def pm_create_project_from_note(
                 if dir_result.startswith("{"):
                     folder_created = f"Folder created: {folder_path_full}"
 
-    # 8. Build response
+    # 9. Build response
     parts = [result]
     if rtm_tag:
         parts.append(f"RTM tag extracted: {rtm_tag}")
@@ -343,6 +406,8 @@ def pm_create_project_from_note(
     parts.append(f"Note linked: {vault}/{note_path}")
     if folder_created:
         parts.append(folder_created)
+    if rules_count:
+        parts.append(f"Match rules imported: {rules_count}")
 
     if suggestions:
         parts.append("")
@@ -442,3 +507,112 @@ def pm_check_synonym_conflicts(ctx: RunContext[Deps]) -> str:
     db = _get_db(ctx)
     proj_svc = ProjectService(db)
     return proj_svc.check_synonym_conflicts()
+
+
+def pm_add_project_match_info(
+    ctx: RunContext[Deps],
+    project_name: str,
+    info_type: str,
+    value: str,
+) -> str:
+    """Add matching metadata to a project for email-to-project matching.
+
+    Args:
+        project_name: Project name or synonym.
+        info_type: Rule type — email_domain, contact, project_number, or keyword.
+        value: The value for the rule (e.g., a domain name or keyword).
+    """
+    logger.info(
+        "pm_add_project_match_info: project=%r type=%r value=%r",
+        project_name, info_type, value,
+    )
+    if info_type not in VALID_MATCH_RULE_TYPES:
+        return ERR_INVALID_MATCH_RULE_TYPE.format(rule_type=info_type)
+
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    result = proj_svc.add_match_rule(project_name, info_type, value)
+
+    # Update Obsidian note if linked
+    project = proj_svc.find_project(project_name)
+    if project and project.obsidian_vault and project.obsidian_path:
+        obsidian_service = _get_obsidian_service(ctx)
+        if obsidian_service:
+            proj_svc.update_obsidian_matching_section(project, obsidian_service)
+
+    return result
+
+
+def pm_remove_project_match_info(
+    ctx: RunContext[Deps],
+    project_name: str,
+    info_type: str,
+    value: str,
+) -> str:
+    """Remove matching metadata from a project.
+
+    Args:
+        project_name: Project name or synonym.
+        info_type: Rule type — email_domain, contact, project_number, or keyword.
+        value: The value to remove.
+    """
+    logger.info(
+        "pm_remove_project_match_info: project=%r type=%r value=%r",
+        project_name, info_type, value,
+    )
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    result = proj_svc.remove_match_rule(project_name, info_type, value)
+
+    # Update Obsidian note if linked
+    project = proj_svc.find_project(project_name)
+    if project and project.obsidian_vault and project.obsidian_path:
+        obsidian_service = _get_obsidian_service(ctx)
+        if obsidian_service:
+            proj_svc.update_obsidian_matching_section(project, obsidian_service)
+
+    return result
+
+
+def pm_list_project_match_info(
+    ctx: RunContext[Deps],
+    project_name: str,
+) -> str:
+    """List all match rules configured for a project.
+
+    Args:
+        project_name: Project name or synonym.
+    """
+    logger.info("pm_list_project_match_info: project=%r", project_name)
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    project = proj_svc.find_project(project_name)
+    if not project:
+        return ERR_PROJECT_NOT_FOUND.format(reference=project_name)
+
+    rules = db.get_match_rules_for_project(project.id)
+    grouped: dict[str, list[str]] = {}
+    for rule in rules:
+        grouped.setdefault(rule.rule_type, []).append(rule.value)
+
+    return json.dumps({"project": project.name, "match_rules": grouped})
+
+
+def pm_match_email_to_project(
+    ctx: RunContext[Deps],
+    sender_email: str,
+    subject: str,
+) -> str:
+    """Score-based email-to-project matching using project rules.
+
+    Args:
+        sender_email: The sender's email address.
+        subject: The email subject line.
+    """
+    logger.info(
+        "pm_match_email_to_project: sender=%r subject=%r",
+        sender_email, subject,
+    )
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    return proj_svc.match_email_to_project(sender_email, subject)

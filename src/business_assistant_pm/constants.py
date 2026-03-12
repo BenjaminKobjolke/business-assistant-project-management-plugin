@@ -67,6 +67,29 @@ ACTION_ARCHIVE = "archive"
 ACTION_REPLY_AND_ARCHIVE = "reply_and_archive"
 ACTION_LEAVE = "leave"
 
+# Match rule types
+MATCH_RULE_EMAIL_DOMAIN = "email_domain"
+MATCH_RULE_CONTACT = "contact"
+MATCH_RULE_PROJECT_NUMBER = "project_number"
+MATCH_RULE_KEYWORD = "keyword"
+VALID_MATCH_RULE_TYPES = (
+    MATCH_RULE_EMAIL_DOMAIN, MATCH_RULE_CONTACT,
+    MATCH_RULE_PROJECT_NUMBER, MATCH_RULE_KEYWORD,
+)
+
+# Match scores
+MATCH_SCORE_HARD = 100  # domain, contact, project_number
+MATCH_SCORE_SOFT = 50  # keyword
+MATCH_SCORE_NAME = 80  # name/synonym substring in subject
+
+# Obsidian note field names (inside **Matching** section)
+MATCH_RULE_OBSIDIAN_FIELDS = {
+    MATCH_RULE_EMAIL_DOMAIN: "email_domains",
+    MATCH_RULE_CONTACT: "contacts",
+    MATCH_RULE_PROJECT_NUMBER: "project_numbers",
+    MATCH_RULE_KEYWORD: "keywords",
+}
+
 # Error messages
 ERR_RTM_NOT_LOADED = "ERROR: RTM plugin not loaded. Project management requires RTM."
 ERR_EMAIL_NOT_LOADED = "ERROR: IMAP plugin not loaded. Project management requires IMAP."
@@ -104,6 +127,11 @@ ERR_SYNONYM_EXISTS_OTHER_PROJECT = (
 ERR_SYNONYM_ALREADY_EXISTS = (
     "Synonym '{synonym}' already exists for project '{project_name}'."
 )
+ERR_INVALID_MATCH_RULE_TYPE = (
+    "ERROR: Invalid rule type '{rule_type}'. "
+    "Valid: email_domain, contact, project_number, keyword"
+)
+ERR_MATCH_RULE_NOT_FOUND = "ERROR: Match rule not found."
 ERR_SYNONYM_CONFLICTS_WITH_PROJECT_NAME = (
     "ERROR: Synonym '{synonym}' conflicts with existing project name '{project_name}'."
 )
@@ -138,10 +166,23 @@ When previewing a task before creation, always show the project tag explicitly.
 ## Projects
 - pm_create_project: Create a new project from Obsidian template
 - pm_create_project_from_note: Create project from an existing Obsidian note
-- pm_list_projects / pm_add_project / pm_add_project_synonym / pm_remove_project_synonym
+- pm_list_projects / pm_add_project / pm_update_project
+- pm_add_project_synonym / pm_remove_project_synonym
 - pm_match_project
-- pm_sync_project_from_obsidian: Re-read note to extract RTM tag
+- pm_sync_project_from_obsidian: Re-read note to extract RTM tag and match rules
 - pm_check_synonym_conflicts: Audit all projects for synonym-vs-name conflicts
+
+## Email-to-Project Matching
+- pm_match_email_to_project(sender_email, subject): Score-based matching using project rules.
+  Returns best match with score and which factor matched (email_domain, contact,
+  project_number, keyword, or name/synonym).
+- pm_add_project_match_info: Add matching metadata to a project. Types: email_domain,
+  contact, project_number, keyword. Also updates the Obsidian note.
+- pm_remove_project_match_info: Remove a matching rule.
+- pm_list_project_match_info: List all match rules configured for a project.
+
+When processing emails and determining which project they belong to, prefer
+pm_match_email_to_project over pm_match_project for automatic matching.
 
 ## Creating New Projects — IMPORTANT
 When the user asks to create a new project, use pm_create_project.
