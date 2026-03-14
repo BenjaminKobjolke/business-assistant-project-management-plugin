@@ -37,6 +37,7 @@ class ProjectService:
         obsidian_vault: str | None = None,
         obsidian_path: str | None = None,
         project_folder: str | None = None,
+        timetracking_project_id: str | None = None,
     ) -> str:
         """Add a new project. Returns confirmation message."""
         try:
@@ -46,6 +47,7 @@ class ProjectService:
                 obsidian_vault=obsidian_vault,
                 obsidian_path=obsidian_path,
                 project_folder=project_folder,
+                timetracking_project_id=timetracking_project_id,
             )
             return f"Project '{project.name}' created."
         except Exception as e:
@@ -423,6 +425,7 @@ class ProjectService:
                 "obsidian_vault": p.obsidian_vault or "",
                 "obsidian_path": p.obsidian_path or "",
                 "project_folder": p.project_folder or "",
+                "timetracking_project_id": p.timetracking_project_id or "",
             }
             synonyms = self._db.get_synonyms_for_project(p.id)
             if synonyms:
@@ -440,6 +443,8 @@ class ProjectService:
             parts.append(f"Obsidian: {project.obsidian_vault}/{project.obsidian_path}")
         if project.project_folder:
             parts.append(f"Project Folder: {project.project_folder}")
+        if project.timetracking_project_id:
+            parts.append(f"Timetracking Project ID: {project.timetracking_project_id}")
         if synonyms:
             parts.append(f"Synonyms: {', '.join(synonyms)}")
 

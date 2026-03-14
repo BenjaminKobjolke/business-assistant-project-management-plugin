@@ -17,8 +17,10 @@ from .constants import (
     ERR_NOTE_CREATION_FAILED,
     ERR_OBSIDIAN_NOT_LOADED,
     ERR_PROJECT_NO_FOLDER,
+    ERR_PROJECT_NO_TIMETRACKING,
     ERR_PROJECT_NOT_FOUND,
     ERR_TEMPLATE_READ_FAILED,
+    ERR_WORKINGTIMES_NOT_LOADED,
     PLUGIN_DATA_PM_DATABASE,
     REQUIRED_SETTINGS_CREATE_PROJECT,
     REQUIRED_SETTINGS_FROM_NOTE,
@@ -29,7 +31,12 @@ from .constants import (
     VALID_MATCH_RULE_TYPES,
 )
 from .database import PmDatabase
-from .plugin_helpers import _get_filesystem_service, _get_obsidian_service, _require_setting
+from .plugin_helpers import (
+    _get_filesystem_service,
+    _get_obsidian_service,
+    _get_workingtimes_service,
+    _require_setting,
+)
 from .project_service import ProjectService
 
 logger = logging.getLogger(__name__)
@@ -68,6 +75,7 @@ def pm_add_project(
     obsidian_vault: str = "",
     obsidian_path: str = "",
     project_folder: str = "",
+    timetracking_project_id: str = "",
 ) -> str:
     """Create a new project. If vault+path provided, auto-extracts RTM tag from note."""
     logger.info("pm_add_project: name=%r", name)
@@ -94,6 +102,7 @@ def pm_add_project(
         obsidian_vault=obsidian_vault or None,
         obsidian_path=obsidian_path or None,
         project_folder=project_folder or None,
+        timetracking_project_id=timetracking_project_id or None,
     )
 
     if project_folder:
@@ -114,6 +123,7 @@ def pm_update_project(
     obsidian_vault: str = "",
     obsidian_path: str = "",
     project_folder: str = "",
+    timetracking_project_id: str = "",
 ) -> str:
     """Update fields on an existing project. Only provided (non-empty) fields are changed.
 
@@ -123,6 +133,7 @@ def pm_update_project(
         obsidian_vault: New Obsidian vault name.
         obsidian_path: New Obsidian note path.
         project_folder: New project folder name or path.
+        timetracking_project_id: New timetracking project ID.
     """
     logger.info("pm_update_project: name=%r", name)
     db = _get_db(ctx)
@@ -139,6 +150,8 @@ def pm_update_project(
         kwargs["obsidian_path"] = obsidian_path
     if project_folder:
         kwargs["project_folder"] = project_folder
+    if timetracking_project_id:
+        kwargs["timetracking_project_id"] = timetracking_project_id
 
     if not kwargs:
         return f"No fields to update for project '{name}'."
@@ -220,6 +233,7 @@ def pm_create_project(
     project_name: str,
     synonyms: str = "",
     project_folder: str = "",
+    timetracking_project_id: str = "",
 ) -> str:
     """Create a new project from Obsidian template.
 
@@ -285,6 +299,7 @@ def pm_create_project(
         obsidian_vault=vault,
         obsidian_path=target_path,
         project_folder=project_folder or None,
+        timetracking_project_id=timetracking_project_id or None,
     )
 
     # 8. Create project folder on disk if project_folder provided
@@ -616,3 +631,61 @@ def pm_match_email_to_project(
     db = _get_db(ctx)
     proj_svc = ProjectService(db)
     return proj_svc.match_email_to_project(sender_email, subject)
+
+
+def pm_log_time(
+    ctx: RunContext[Deps],
+    project_name: str,
+    time_seconds: int,
+    comment: str,
+    adjust_time: str = "",
+) -> str:
+    """Log time to a project's linked timetracking project.
+
+    Args:
+        project_name: Project name or synonym to look up.
+        time_seconds: Duration in seconds.
+        comment: Description of the work done.
+        adjust_time: Optional time adjustment (e.g. "-1h", "+30m").
+    """
+    logger.info(
+        "pm_log_time: project=%r seconds=%d comment=%r",
+        project_name, time_seconds, comment,
+    )
+
+    # 1. Get workingtimes service
+    workingtimes_service = _get_workingtimes_service(ctx)
+    if not workingtimes_service:
+        return ERR_WORKINGTIMES_NOT_LOADED
+
+    # 2. Find project
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    project = proj_svc.find_project(project_name)
+    if not project:
+        return ERR_PROJECT_NOT_FOUND.format(reference=project_name)
+
+    # 3. Check timetracking project ID
+    if not project.timetracking_project_id:
+        return ERR_PROJECT_NO_TIMETRACKING.format(name=project.name)
+
+    # 4. Call workingtimes service
+    kwargs: dict[str, object] = {
+        "project_id": project.timetracking_project_id,
+        "time_seconds": time_seconds,
+        "comment": comment,
+    }
+    if adjust_time:
+        kwargs["adjust_time"] = adjust_time
+    return workingtimes_service.add_time(**kwargs)
+
+
+def pm_list_timetracking_projects(ctx: RunContext[Deps]) -> str:
+    """List all available projects from the timetracking system."""
+    logger.info("pm_list_timetracking_projects")
+
+    workingtimes_service = _get_workingtimes_service(ctx)
+    if not workingtimes_service:
+        return ERR_WORKINGTIMES_NOT_LOADED
+
+    return workingtimes_service.list_projects()

@@ -19,9 +19,10 @@ PLUGIN_DATA_RTM_SERVICE = "rtm_service"
 PLUGIN_DATA_EMAIL_SERVICE = "email_service"
 PLUGIN_DATA_OBSIDIAN_SERVICE = "obsidian_service"
 PLUGIN_DATA_FILESYSTEM_SERVICE = "filesystem_service"
+PLUGIN_DATA_WORKINGTIMES_SERVICE = "workingtimes_service"
 
 # Required categories
-REQUIRED_CATEGORIES = ("todo", "email", "notes", "calendar", "filesystem")
+REQUIRED_CATEGORIES = ("todo", "email", "notes", "calendar", "filesystem", "timetracking")
 
 # Tracking ID format
 TRACKING_ID_PATTERN = r"\[PM-TRACK:([0-9a-f-]{36})\]"
@@ -117,6 +118,12 @@ ERR_FILESYSTEM_NOT_LOADED = (
     "ERROR: Filesystem plugin not loaded. Project management requires filesystem."
 )
 ERR_PROJECT_NO_FOLDER = "ERROR: Project '{name}' has no project folder configured."
+ERR_WORKINGTIMES_NOT_LOADED = (
+    "ERROR: Workingtimes plugin not loaded. Project management requires timetracking."
+)
+ERR_PROJECT_NO_TIMETRACKING = (
+    "ERROR: Project '{name}' has no timetracking project ID configured."
+)
 ERR_BASE_PATH_REQUIRED_FOR_FOLDER = (
     "ERROR: Setting '{key}' must be configured to create the project folder on disk. "
     "Please set it with: pm_set_setting(key=\"{key}\", value=\"<path>\")"
@@ -236,6 +243,12 @@ Workflows are reusable multi-step processes defined by the user.
   Creates {base_path}/{project_folder}/Source/{YYYYMMDD}_{source_type}/ structure.
   source_type: "email" or "download"
   Requires setting: project_files_base_path
+
+## Time Tracking
+- pm_log_time: Log time to a project's linked timetracking project.
+  Requires the project to have a timetracking_project_id configured.
+  Args: project_name, time_seconds (int), comment, adjust_time (optional, e.g. "-1h")
+- pm_list_timetracking_projects: List all available projects from the timetracking system.
 
 ## Missing Settings Behavior
 If a required setting is missing, the tool returns an error message telling you exactly

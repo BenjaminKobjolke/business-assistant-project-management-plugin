@@ -11,6 +11,7 @@ from .constants import (
     PLUGIN_DATA_FILESYSTEM_SERVICE,
     PLUGIN_DATA_OBSIDIAN_SERVICE,
     PLUGIN_DATA_RTM_SERVICE,
+    PLUGIN_DATA_WORKINGTIMES_SERVICE,
 )
 from .database import PmDatabase
 
@@ -33,6 +34,11 @@ def _get_obsidian_service(ctx: RunContext[Deps]):
 def _get_filesystem_service(ctx: RunContext[Deps]):
     """Retrieve filesystem service from plugin_data."""
     return ctx.deps.plugin_data.get(PLUGIN_DATA_FILESYSTEM_SERVICE)
+
+
+def _get_workingtimes_service(ctx: RunContext[Deps]):
+    """Retrieve workingtimes service from plugin_data."""
+    return ctx.deps.plugin_data.get(PLUGIN_DATA_WORKINGTIMES_SERVICE)
 
 
 def _require_setting(db: PmDatabase, key: str) -> str | None:

@@ -141,6 +141,13 @@ class TestProjectService:
         data = json.loads(result)
         assert data["projects"][0]["project_folder"] == "MyFolder"
 
+    def test_list_projects_includes_timetracking_project_id(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        svc.add_project("TTP", timetracking_project_id="tt-99")
+        result = svc.list_projects()
+        data = json.loads(result)
+        assert data["projects"][0]["timetracking_project_id"] == "tt-99"
+
     def test_add_project_with_folder(self, db: PmDatabase) -> None:
         svc = ProjectService(db)
         result = svc.add_project("WithFolder", project_folder="Folder123")
@@ -313,6 +320,12 @@ class TestFormatProjectDetails:
         assert "Obsidian: vault/notes/full.md" in result
         assert "Project Folder: FullFolder" in result
         assert "Synonyms: f" in result
+
+    def test_format_with_timetracking(self, db: PmDatabase) -> None:
+        svc = ProjectService(db)
+        project = db.add_project("TTProject", timetracking_project_id="tt-42")
+        result = svc.format_project_details(project)
+        assert "Timetracking Project ID: tt-42" in result
 
 
 def _make_ctx(db: PmDatabase) -> RunContext[Deps]:

@@ -36,6 +36,7 @@ class PmProject(Base):
     obsidian_vault: Mapped[str | None] = mapped_column(String, default=None)
     obsidian_path: Mapped[str | None] = mapped_column(String, default=None)
     project_folder: Mapped[str | None] = mapped_column(String, default=None)
+    timetracking_project_id: Mapped[str | None] = mapped_column(String, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC),
     )
@@ -190,6 +191,7 @@ class PmDatabase:
         obsidian_vault: str | None = None,
         obsidian_path: str | None = None,
         project_folder: str | None = None,
+        timetracking_project_id: str | None = None,
     ) -> PmProject:
         """Add a new project."""
         with self._open() as session:
@@ -199,6 +201,7 @@ class PmDatabase:
                 obsidian_vault=obsidian_vault,
                 obsidian_path=obsidian_path,
                 project_folder=project_folder,
+                timetracking_project_id=timetracking_project_id,
                 created_at=datetime.now(UTC),
             )
             session.add(project)
@@ -250,6 +253,7 @@ class PmDatabase:
         obsidian_vault: str | None = None,
         obsidian_path: str | None = None,
         project_folder: str | None = None,
+        timetracking_project_id: str | None = None,
     ) -> bool:
         """Update project fields."""
         with self._open() as session:
@@ -268,6 +272,8 @@ class PmDatabase:
                 project.obsidian_path = obsidian_path
             if project_folder is not None:
                 project.project_folder = project_folder
+            if timetracking_project_id is not None:
+                project.timetracking_project_id = timetracking_project_id
             session.commit()
             return True
 

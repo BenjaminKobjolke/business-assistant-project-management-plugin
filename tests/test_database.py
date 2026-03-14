@@ -86,6 +86,18 @@ class TestProjects:
         assert project is not None
         assert project.project_folder == "NewFolder"
 
+    def test_add_project_with_timetracking_id(self, db: PmDatabase) -> None:
+        project = db.add_project("TT Project", timetracking_project_id="tt-123")
+        assert project.timetracking_project_id == "tt-123"
+
+    def test_update_project_timetracking_id(self, db: PmDatabase) -> None:
+        db.add_project("TTUpdate")
+        result = db.update_project("TTUpdate", timetracking_project_id="tt-456")
+        assert result is True
+        project = db.get_project_by_name("TTUpdate")
+        assert project is not None
+        assert project.timetracking_project_id == "tt-456"
+
     def test_update_project_not_found(self, db: PmDatabase) -> None:
         assert db.update_project("Ghost", rtm_tag="#x") is False
 
@@ -429,3 +441,4 @@ class TestAutoMigration:
         assert project.name == "OldProject"
         assert project.rtm_tag == "#old"
         assert project.project_folder is None
+        assert project.timetracking_project_id is None
