@@ -3,7 +3,45 @@
   "max_lines_per_file": {
     "enabled": true,
     "warning": 300,
-    "error": 500
+    "error": 500,
+    "exceptions": [
+      {
+        "file": "src/business_assistant_pm/database.py",
+        "warning": 700,
+        "error": 800,
+        "reason": "Data access layer with SQLAlchemy models + CRUD for 8 tables"
+      },
+      {
+        "file": "src/business_assistant_pm/tools_project.py",
+        "warning": 700,
+        "error": 800,
+        "reason": "14 PydanticAI tool functions sharing helpers and registration"
+      },
+      {
+        "file": "src/business_assistant_pm/project_service.py",
+        "warning": 500,
+        "error": 600,
+        "reason": "Service layer coordinating database, filesystem, and Obsidian operations"
+      },
+      {
+        "file": "tests/test_create_project.py",
+        "warning": 350,
+        "error": 500,
+        "reason": "Test suite for complex project creation with templates"
+      },
+      {
+        "file": "tests/test_database.py",
+        "warning": 450,
+        "error": 500,
+        "reason": "Test suite covering CRUD for 8 database tables"
+      },
+      {
+        "file": "tests/test_project_service.py",
+        "warning": 400,
+        "error": 500,
+        "reason": "Test suite for project service with mocked dependencies"
+      }
+    ]
   },
   "pmd_duplicates": {
     "enabled": true,
