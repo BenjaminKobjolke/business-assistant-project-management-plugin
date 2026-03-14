@@ -53,6 +53,8 @@ from .tools_tracking import (
     pm_complete_tracked_task,
     pm_create_todo_from_email,
     pm_handle_completed_email,
+    pm_link_email_to_project,
+    pm_list_email_references,
 )
 from .tools_workflow import (
     pm_add_workflow,
@@ -80,6 +82,8 @@ def register(registry: PluginRegistry) -> None:
         Tool(pm_create_todo_from_email, name="pm_create_todo_from_email"),
         Tool(pm_complete_tracked_task, name="pm_complete_tracked_task"),
         Tool(pm_handle_completed_email, name="pm_handle_completed_email"),
+        Tool(pm_link_email_to_project, name="pm_link_email_to_project"),
+        Tool(pm_list_email_references, name="pm_list_email_references"),
         Tool(pm_delegate_email, name="pm_delegate_email"),
         Tool(pm_check_delegation_reply, name="pm_check_delegation_reply"),
         Tool(pm_resolve_delegation, name="pm_resolve_delegation"),

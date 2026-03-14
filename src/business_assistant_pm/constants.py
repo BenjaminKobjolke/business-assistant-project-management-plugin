@@ -139,6 +139,7 @@ ERR_INVALID_MATCH_RULE_TYPE = (
     "Valid: email_domain, contact, project_number, keyword"
 )
 ERR_MATCH_RULE_NOT_FOUND = "ERROR: Match rule not found."
+ERR_EMAIL_REF_NOT_FOUND = "ERROR: Email reference with ID {ref_id} not found."
 ERR_SYNONYM_CONFLICTS_WITH_PROJECT_NAME = (
     "ERROR: Synonym '{synonym}' conflicts with existing project name '{project_name}'."
 )
@@ -159,6 +160,11 @@ Check pm_get_settings for the configured default_priority. If not set, use prior
 Never create a task without a priority. Always include !2 (or the configured value) in the
 RTM Smart Add string.
 When previewing a task before creation, always show the project tag explicitly.
+
+## Email References
+- pm_link_email_to_project: Link an email to a project WITHOUT moving it. \
+Just records the reference.
+- pm_list_email_references: List all email references for a project.
 
 ## Email -> Self Todo
 - pm_create_todo_from_email: Create RTM task from email with tracking

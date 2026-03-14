@@ -15,6 +15,7 @@ from .constants import (
     DEFAULT_DUE,
     DEFAULT_PRIORITY,
     ERR_EMAIL_NOT_LOADED,
+    ERR_PROJECT_NOT_FOUND,
     ERR_RTM_NOT_LOADED,
     ERR_TRACKING_NOT_FOUND,
     PLUGIN_DATA_PM_DATABASE,
@@ -175,6 +176,78 @@ def pm_complete_tracked_task(ctx: RunContext[Deps], task_id: str) -> str:
         )
 
     return result
+
+
+def pm_link_email_to_project(
+    ctx: RunContext[Deps],
+    project_name: str,
+    email_subject: str,
+    email_from: str,
+    email_date: str = "",
+    folder: str = "INBOX",
+    note: str = "",
+) -> str:
+    """Link an email to a project WITHOUT moving it. Just records the reference.
+
+    Use this when the user wants to associate an email with a project for reference
+    without creating an RTM task or moving the email.
+    """
+    logger.info(
+        "pm_link_email_to_project: project=%r subject=%r from=%r",
+        project_name, email_subject, email_from,
+    )
+
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    proj = proj_svc.find_project(project_name)
+    if not proj:
+        return ERR_PROJECT_NOT_FOUND.format(reference=project_name)
+
+    ref = db.add_email_reference(
+        project_id=proj.id,
+        project_name=proj.name,
+        email_subject=email_subject,
+        email_from=email_from,
+        email_date=email_date,
+        email_folder=folder,
+        note=note,
+    )
+
+    return (
+        f"Email linked to project '{proj.name}'.\n"
+        f"  Subject: {email_subject}\n"
+        f"  From: {email_from}\n"
+        f"  Reference ID: {ref.id}"
+    )
+
+
+def pm_list_email_references(
+    ctx: RunContext[Deps],
+    project_name: str,
+) -> str:
+    """List all email references for a project."""
+    logger.info("pm_list_email_references: project=%r", project_name)
+
+    db = _get_db(ctx)
+    refs = db.list_email_references(project_name)
+
+    items = []
+    for r in refs:
+        item: dict = {
+            "id": r.id,
+            "project_name": r.project_name,
+            "email_subject": r.email_subject,
+            "email_from": r.email_from,
+            "email_folder": r.email_folder,
+            "created_at": r.created_at.isoformat() if r.created_at else "",
+        }
+        if r.email_date:
+            item["email_date"] = r.email_date
+        if r.note:
+            item["note"] = r.note
+        items.append(item)
+
+    return json.dumps({"references": items})
 
 
 def pm_handle_completed_email(

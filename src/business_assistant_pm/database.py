@@ -119,6 +119,24 @@ class PmTracking(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
 
 
+class PmEmailReference(Base):
+    """Email-project reference records (without moving the email)."""
+
+    __tablename__ = "pm_email_references"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column()
+    project_name: Mapped[str] = mapped_column(String)
+    email_subject: Mapped[str] = mapped_column(String)
+    email_from: Mapped[str] = mapped_column(String)
+    email_date: Mapped[str | None] = mapped_column(String, default=None)
+    email_folder: Mapped[str] = mapped_column(String, default="INBOX")
+    note: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC),
+    )
+
+
 class PmDatabase:
     """Database operations for PM plugin."""
 
@@ -680,6 +698,61 @@ class PmDatabase:
                 return False
             record.status = "completed"
             record.completed_at = datetime.now(UTC)
+            session.commit()
+            return True
+
+    # --- Email References ---
+
+    def add_email_reference(
+        self,
+        project_id: int,
+        project_name: str,
+        email_subject: str,
+        email_from: str,
+        email_date: str = "",
+        email_folder: str = "INBOX",
+        note: str = "",
+    ) -> PmEmailReference:
+        """Add an email reference to a project (without moving the email)."""
+        with self._open() as session:
+            ref = PmEmailReference(
+                project_id=project_id,
+                project_name=project_name,
+                email_subject=email_subject,
+                email_from=email_from,
+                email_date=email_date or None,
+                email_folder=email_folder,
+                note=note or None,
+                created_at=datetime.now(UTC),
+            )
+            session.add(ref)
+            session.commit()
+            session.expunge(ref)
+            return ref
+
+    def list_email_references(self, project_name: str) -> list[PmEmailReference]:
+        """List all email references for a project (by name, case-insensitive)."""
+        with self._open() as session:
+            refs = (
+                session.query(PmEmailReference)
+                .filter(PmEmailReference.project_name.ilike(project_name))
+                .all()
+            )
+            for r in refs:
+                session.expunge(r)
+            return refs
+
+    def delete_email_reference(self, ref_id: int) -> bool:
+        """Delete an email reference by ID."""
+        with self._open() as session:
+            ref = (
+                session.query(PmEmailReference)
+                .filter(PmEmailReference.id == ref_id)
+                .first()
+            )
+            if not ref:
+                return False
+            session.delete(ref)
             session.commit()
             return True
 
