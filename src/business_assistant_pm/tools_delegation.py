@@ -258,40 +258,45 @@ def pm_resolve_delegation(
     return "\n".join(results)
 
 
-def pm_set_contact(
+def pm_contacts(
     ctx: RunContext[Deps],
-    name: str,
-    email: str,
+    action: str = "list",
+    name: str = "",
+    email: str = "",
     rtm_list_tag: str = "",
 ) -> str:
-    """Store or update a delegation contact with optional RTM list tag.
+    """Manage delegation contacts. action: list, set.
 
-    The rtm_list_tag should be the RTM Smart Add list tag (e.g., '#XIDA - Markus').
+    Args:
+        action: Operation — list or set.
+        name: Contact name (required for set).
+        email: Contact email (required for set).
+        rtm_list_tag: RTM Smart Add list tag, e.g. '#XIDA - Markus' (optional, for set).
     """
-    logger.info("pm_set_contact: name=%r email=%r", name, email)
+    logger.info("pm_contacts: action=%r name=%r", action, name)
     db = _get_db(ctx)
-    contact = db.set_contact(
-        name=name,
-        email=email,
-        rtm_list_tag=rtm_list_tag or None,
-    )
-    tag_info = f", RTM list tag: {contact.rtm_list_tag}" if contact.rtm_list_tag else ""
-    return f"Contact '{contact.name}' set ({contact.email}{tag_info})."
 
+    if action == "set":
+        contact = db.set_contact(
+            name=name,
+            email=email,
+            rtm_list_tag=rtm_list_tag or None,
+        )
+        tag_info = f", RTM list tag: {contact.rtm_list_tag}" if contact.rtm_list_tag else ""
+        return f"Contact '{contact.name}' set ({contact.email}{tag_info})."
 
-def pm_list_contacts(ctx: RunContext[Deps]) -> str:
-    """List all delegation contacts."""
-    logger.info("pm_list_contacts")
-    db = _get_db(ctx)
-    contacts = db.list_contacts()
-    if not contacts:
-        return "No contacts configured."
-    items = [
-        {
-            "name": c.name,
-            "email": c.email,
-            "rtm_list_tag": c.rtm_list_tag or "",
-        }
-        for c in contacts
-    ]
-    return json.dumps({"contacts": items})
+    if action == "list":
+        contacts = db.list_contacts()
+        if not contacts:
+            return "No contacts configured."
+        items = [
+            {
+                "name": c.name,
+                "email": c.email,
+                "rtm_list_tag": c.rtm_list_tag or "",
+            }
+            for c in contacts
+        ]
+        return json.dumps({"contacts": items})
+
+    return f"ERROR: Unknown action '{action}'. Valid: list, set."

@@ -11,13 +11,8 @@ from pydantic_ai import RunContext
 from business_assistant_pm.constants import PLUGIN_DATA_PM_DATABASE
 from business_assistant_pm.database import PmDatabase
 from business_assistant_pm.tools_workflow import (
-    pm_add_workflow,
-    pm_add_workflow_synonym,
-    pm_delete_workflow,
-    pm_list_workflows,
-    pm_remove_workflow_synonym,
+    pm_manage_workflow,
     pm_run_workflow,
-    pm_update_workflow,
 )
 
 
@@ -31,116 +26,125 @@ def _make_ctx(db: PmDatabase) -> RunContext[Deps]:
     return ctx
 
 
-class TestPmAddWorkflow:
-    def test_add_workflow(self, db: PmDatabase) -> None:
+class TestPmManageWorkflowCreate:
+    def test_create(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_add_workflow(ctx, "Inbox Zero", "Step 1: Check emails")
+        result = pm_manage_workflow(ctx, "create", name="Inbox Zero", instructions="Step 1")
         assert "created" in result
 
-    def test_add_workflow_with_synonyms(self, db: PmDatabase) -> None:
+    def test_create_with_synonyms(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_add_workflow(
-            ctx, "Inbox Zero", "Step 1: Check emails",
-            synonyms="inbox aufraeumen, clean inbox",
+        result = pm_manage_workflow(
+            ctx, "create", name="Inbox Zero", instructions="Step 1",
+            synonym="inbox aufraeumen, clean inbox",
         )
         assert "created" in result
         assert "inbox aufraeumen" in result
         assert "clean inbox" in result
 
-    def test_add_duplicate_workflow(self, db: PmDatabase) -> None:
+    def test_create_duplicate(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        pm_add_workflow(ctx, "Unique", "instructions")
-        result = pm_add_workflow(ctx, "Unique", "instructions")
+        pm_manage_workflow(ctx, "create", name="Unique", instructions="x")
+        result = pm_manage_workflow(ctx, "create", name="Unique", instructions="x")
         assert "Error" in result
 
 
-class TestPmUpdateWorkflow:
-    def test_update_workflow(self, db: PmDatabase) -> None:
+class TestPmManageWorkflowUpdate:
+    def test_update(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        pm_add_workflow(ctx, "Flow", "old")
-        result = pm_update_workflow(ctx, "Flow", "new")
+        pm_manage_workflow(ctx, "create", name="Flow", instructions="old")
+        result = pm_manage_workflow(ctx, "update", name="Flow", instructions="new")
         assert "updated" in result
 
     def test_update_not_found(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_update_workflow(ctx, "Ghost", "new")
+        result = pm_manage_workflow(ctx, "update", name="Ghost", instructions="new")
         assert "not found" in result
 
 
-class TestPmDeleteWorkflow:
-    def test_delete_workflow(self, db: PmDatabase) -> None:
+class TestPmManageWorkflowDelete:
+    def test_delete(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        pm_add_workflow(ctx, "Deletable", "instructions")
-        result = pm_delete_workflow(ctx, "Deletable")
+        pm_manage_workflow(ctx, "create", name="Deletable", instructions="x")
+        result = pm_manage_workflow(ctx, "delete", name="Deletable")
         assert "deleted" in result
 
     def test_delete_not_found(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_delete_workflow(ctx, "Ghost")
+        result = pm_manage_workflow(ctx, "delete", name="Ghost")
         assert "not found" in result
 
 
-class TestPmAddWorkflowSynonym:
+class TestPmManageWorkflowSynonyms:
     def test_add_synonym(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        pm_add_workflow(ctx, "Flow", "instructions")
-        result = pm_add_workflow_synonym(ctx, "Flow", "alias")
+        pm_manage_workflow(ctx, "create", name="Flow", instructions="x")
+        result = pm_manage_workflow(ctx, "add_synonym", name="Flow", synonym="alias")
         assert "added" in result
 
-    def test_add_synonym_workflow_not_found(self, db: PmDatabase) -> None:
+    def test_add_synonym_not_found(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_add_workflow_synonym(ctx, "Ghost", "alias")
+        result = pm_manage_workflow(ctx, "add_synonym", name="Ghost", synonym="alias")
         assert "not found" in result
 
-
-class TestPmRemoveWorkflowSynonym:
     def test_remove_synonym(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        pm_add_workflow(ctx, "Flow", "instructions")
-        pm_add_workflow_synonym(ctx, "Flow", "removable")
-        result = pm_remove_workflow_synonym(ctx, "removable")
+        pm_manage_workflow(ctx, "create", name="Flow", instructions="x")
+        pm_manage_workflow(ctx, "add_synonym", name="Flow", synonym="removable")
+        result = pm_manage_workflow(ctx, "remove_synonym", synonym="removable")
         assert "removed" in result
 
     def test_remove_synonym_not_found(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_remove_workflow_synonym(ctx, "ghost")
+        result = pm_manage_workflow(ctx, "remove_synonym", synonym="ghost")
         assert "not found" in result
 
 
-class TestPmListWorkflows:
+class TestPmManageWorkflowList:
     def test_list_empty(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_list_workflows(ctx)
+        result = pm_manage_workflow(ctx, "list")
         data = json.loads(result)
         assert data["workflows"] == []
 
     def test_list_with_workflows(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        pm_add_workflow(ctx, "A", "instructions A")
-        pm_add_workflow(ctx, "B", "instructions B")
-        result = pm_list_workflows(ctx)
+        pm_manage_workflow(ctx, "create", name="A", instructions="a")
+        pm_manage_workflow(ctx, "create", name="B", instructions="b")
+        result = pm_manage_workflow(ctx, "list")
         data = json.loads(result)
         assert len(data["workflows"]) == 2
 
 
-class TestPmRunWorkflow:
-    def test_run_workflow_by_name(self, db: PmDatabase) -> None:
+class TestPmManageWorkflowInvalidAction:
+    def test_unknown_action(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        pm_add_workflow(ctx, "Inbox Zero", "Step 1: Check emails\nStep 2: Archive")
+        result = pm_manage_workflow(ctx, "invalid")
+        assert "ERROR" in result
+        assert "Unknown action" in result
+
+
+class TestPmRunWorkflow:
+    def test_run_by_name(self, db: PmDatabase) -> None:
+        ctx = _make_ctx(db)
+        pm_manage_workflow(
+            ctx, "create", name="Inbox Zero",
+            instructions="Step 1: Check emails\nStep 2: Archive",
+        )
         result = pm_run_workflow(ctx, "Inbox Zero")
         assert "Workflow: Inbox Zero" in result
         assert "Step 1: Check emails" in result
         assert "Step 2: Archive" in result
 
-    def test_run_workflow_by_synonym(self, db: PmDatabase) -> None:
+    def test_run_by_synonym(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        pm_add_workflow(ctx, "Inbox Zero", "Step 1: Check emails")
-        pm_add_workflow_synonym(ctx, "Inbox Zero", "inbox aufraeumen")
+        pm_manage_workflow(ctx, "create", name="Inbox Zero", instructions="Step 1")
+        pm_manage_workflow(ctx, "add_synonym", name="Inbox Zero", synonym="inbox aufraeumen")
         result = pm_run_workflow(ctx, "inbox aufraeumen")
         assert "Workflow: Inbox Zero" in result
-        assert "Step 1: Check emails" in result
+        assert "Step 1" in result
 
-    def test_run_workflow_not_found(self, db: PmDatabase) -> None:
+    def test_run_not_found(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
         result = pm_run_workflow(ctx, "nonexistent")
         assert "not found" in result

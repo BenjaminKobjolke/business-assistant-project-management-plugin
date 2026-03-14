@@ -16,7 +16,7 @@ class TestPluginRegistration:
         registry = PluginRegistry()
         register(registry)
 
-        assert len(registry.all_tools()) == 38
+        assert len(registry.all_tools()) == 26
         assert len(registry.plugins) == 1
         assert registry.plugins[0].name == "project_management"
         assert registry.plugins[0].category == "project_management"
@@ -69,32 +69,20 @@ class TestPluginRegistration:
             "pm_delegate_email",
             "pm_check_delegation_reply",
             "pm_resolve_delegation",
-            "pm_set_contact",
-            "pm_list_contacts",
+            "pm_contacts",
             "pm_list_projects",
             "pm_create_project",
             "pm_create_project_from_note",
             "pm_add_project",
-            "pm_add_project_synonym",
-            "pm_remove_project_synonym",
             "pm_match_project",
             "pm_sync_project_from_obsidian",
             "pm_store_file_in_project",
-            "pm_set_setting",
-            "pm_get_settings",
-            "pm_list_tracking",
-            "pm_get_tracking",
-            "pm_add_workflow",
-            "pm_update_workflow",
-            "pm_delete_workflow",
-            "pm_add_workflow_synonym",
-            "pm_remove_workflow_synonym",
-            "pm_list_workflows",
+            "pm_settings",
+            "pm_tracking",
+            "pm_manage_workflow",
             "pm_run_workflow",
             "pm_check_synonym_conflicts",
-            "pm_add_project_match_info",
-            "pm_remove_project_match_info",
-            "pm_list_project_match_info",
+            "pm_manage_match_info",
             "pm_match_email_to_project",
             "pm_update_project",
             "pm_log_time",

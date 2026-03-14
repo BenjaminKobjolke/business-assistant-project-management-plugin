@@ -12,8 +12,6 @@ from business_assistant_pm.constants import PLUGIN_DATA_PM_DATABASE
 from business_assistant_pm.database import PmDatabase
 from business_assistant_pm.project_service import ProjectService
 from business_assistant_pm.tools_project import (
-    pm_add_project_synonym,
-    pm_remove_project_synonym,
     pm_update_project,
 )
 
@@ -382,15 +380,17 @@ class TestPmUpdateProject:
         assert project.project_folder == "Folder"
 
 
-class TestPmRemoveProjectSynonym:
-    def test_remove_synonym(self, db: PmDatabase) -> None:
+class TestPmUpdateProjectSynonyms:
+    def test_add_and_remove_synonyms(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
         db.add_project("Project")
-        pm_add_project_synonym(ctx, "Project", "removable")
-        result = pm_remove_project_synonym(ctx, "removable")
+        result = pm_update_project(ctx, "Project", add_synonyms="alias1, alias2")
+        assert "added" in result
+        result = pm_update_project(ctx, "Project", remove_synonyms="alias1")
         assert "removed" in result
 
     def test_remove_synonym_not_found(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_remove_project_synonym(ctx, "ghost")
+        db.add_project("Project")
+        result = pm_update_project(ctx, "Project", remove_synonyms="ghost")
         assert "not found" in result

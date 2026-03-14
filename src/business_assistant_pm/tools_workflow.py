@@ -18,98 +18,54 @@ def _get_db(ctx: RunContext[Deps]) -> PmDatabase:
     return ctx.deps.plugin_data[PLUGIN_DATA_PM_DATABASE]
 
 
-def pm_add_workflow(
+def pm_manage_workflow(
     ctx: RunContext[Deps],
-    name: str,
-    instructions: str,
-    synonyms: str = "",
+    action: str,
+    name: str = "",
+    instructions: str = "",
+    synonym: str = "",
 ) -> str:
-    """Create a reusable named workflow with AI instructions.
+    """Manage workflows. action: create, update, delete, list, add_synonym, remove_synonym.
 
     Args:
-        name: Display name for the workflow.
-        instructions: The AI instructions describing the multi-step process.
-        synonyms: Optional comma-separated alternative trigger phrases.
+        action: Operation to perform (create, update, delete, list, add_synonym, remove_synonym).
+        name: Workflow name (required for create, update, delete, add_synonym).
+        instructions: AI instructions (required for create, update). For create, may include
+            comma-separated synonyms in the synonym parameter.
+        synonym: Synonym phrase (required for add_synonym, remove_synonym).
+            For create, optional comma-separated alternative trigger phrases.
     """
-    logger.info("pm_add_workflow: name=%r", name)
+    logger.info("pm_manage_workflow: action=%r name=%r", action, name)
     db = _get_db(ctx)
     svc = WorkflowService(db)
-    result = svc.add_workflow(name, instructions)
 
-    synonym_results = []
-    if synonyms:
-        for synonym in (s.strip() for s in synonyms.split(",") if s.strip()):
-            synonym_results.append(svc.add_synonym(name, synonym))
+    if action == "create":
+        result = svc.add_workflow(name, instructions)
+        synonym_results = []
+        if synonym:
+            for s in (s.strip() for s in synonym.split(",") if s.strip()):
+                synonym_results.append(svc.add_synonym(name, s))
+        parts = [result]
+        parts.extend(synonym_results)
+        return "\n".join(parts)
 
-    parts = [result]
-    parts.extend(synonym_results)
-    return "\n".join(parts)
+    if action == "update":
+        return svc.update_workflow(name, instructions)
 
+    if action == "delete":
+        return svc.delete_workflow(name)
 
-def pm_update_workflow(
-    ctx: RunContext[Deps],
-    name: str,
-    instructions: str,
-) -> str:
-    """Update the instructions of an existing workflow.
+    if action == "list":
+        return svc.list_workflows()
 
-    Args:
-        name: Name of the workflow to update.
-        instructions: The new AI instructions.
-    """
-    logger.info("pm_update_workflow: name=%r", name)
-    db = _get_db(ctx)
-    svc = WorkflowService(db)
-    return svc.update_workflow(name, instructions)
+    if action == "add_synonym":
+        return svc.add_synonym(name, synonym)
 
+    if action == "remove_synonym":
+        return svc.remove_synonym(synonym)
 
-def pm_delete_workflow(ctx: RunContext[Deps], name: str) -> str:
-    """Delete a workflow and all its synonyms.
-
-    Args:
-        name: Name of the workflow to delete.
-    """
-    logger.info("pm_delete_workflow: name=%r", name)
-    db = _get_db(ctx)
-    svc = WorkflowService(db)
-    return svc.delete_workflow(name)
-
-
-def pm_add_workflow_synonym(
-    ctx: RunContext[Deps],
-    workflow_name: str,
-    synonym: str,
-) -> str:
-    """Add an alternative trigger phrase for a workflow.
-
-    Args:
-        workflow_name: Name of the workflow.
-        synonym: Alternative phrase to trigger this workflow.
-    """
-    logger.info("pm_add_workflow_synonym: workflow=%r synonym=%r", workflow_name, synonym)
-    db = _get_db(ctx)
-    svc = WorkflowService(db)
-    return svc.add_synonym(workflow_name, synonym)
-
-
-def pm_remove_workflow_synonym(ctx: RunContext[Deps], synonym: str) -> str:
-    """Remove an alternative trigger phrase for a workflow.
-
-    Args:
-        synonym: The synonym to remove.
-    """
-    logger.info("pm_remove_workflow_synonym: synonym=%r", synonym)
-    db = _get_db(ctx)
-    svc = WorkflowService(db)
-    return svc.remove_synonym(synonym)
-
-
-def pm_list_workflows(ctx: RunContext[Deps]) -> str:
-    """List all workflows as JSON."""
-    logger.info("pm_list_workflows")
-    db = _get_db(ctx)
-    svc = WorkflowService(db)
-    return svc.list_workflows()
+    valid = "create, update, delete, list, add_synonym, remove_synonym"
+    return f"ERROR: Unknown action '{action}'. Valid: {valid}."
 
 
 def pm_run_workflow(ctx: RunContext[Deps], reference: str) -> str:

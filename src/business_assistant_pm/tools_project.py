@@ -124,6 +124,8 @@ def pm_update_project(
     obsidian_path: str = "",
     project_folder: str = "",
     timetracking_project_id: str = "",
+    add_synonyms: str = "",
+    remove_synonyms: str = "",
 ) -> str:
     """Update fields on an existing project. Only provided (non-empty) fields are changed.
 
@@ -134,6 +136,8 @@ def pm_update_project(
         obsidian_path: New Obsidian note path.
         project_folder: New project folder name or path.
         timetracking_project_id: New timetracking project ID.
+        add_synonyms: Comma-separated synonyms to add.
+        remove_synonyms: Comma-separated synonyms to remove.
     """
     logger.info("pm_update_project: name=%r", name)
     db = _get_db(ctx)
@@ -153,40 +157,36 @@ def pm_update_project(
     if timetracking_project_id:
         kwargs["timetracking_project_id"] = timetracking_project_id
 
-    if not kwargs:
+    has_field_updates = bool(kwargs)
+    has_synonym_changes = bool(add_synonyms or remove_synonyms)
+
+    if not has_field_updates and not has_synonym_changes:
         return f"No fields to update for project '{name}'."
 
-    db.update_project(name, **kwargs)
+    parts: list[str] = []
 
-    # Create project folder on disk if project_folder was updated
-    if project_folder:
-        filesystem_service = _get_filesystem_service(ctx)
-        if filesystem_service:
-            base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
-            if base_path:
-                folder_path_full = _resolve_project_folder(base_path, project_folder)
-                filesystem_service.create_directory(folder_path_full)
+    if has_field_updates:
+        db.update_project(name, **kwargs)
+        # Create project folder on disk if project_folder was updated
+        if project_folder:
+            filesystem_service = _get_filesystem_service(ctx)
+            if filesystem_service:
+                base_path = db.get_setting(SETTING_PROJECT_FILES_BASE_PATH)
+                if base_path:
+                    folder_path_full = _resolve_project_folder(base_path, project_folder)
+                    filesystem_service.create_directory(folder_path_full)
+        updated_fields = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
+        parts.append(f"Project '{name}' updated: {updated_fields}")
 
-    updated_fields = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
-    return f"Project '{name}' updated: {updated_fields}"
-
-
-def pm_add_project_synonym(
-    ctx: RunContext[Deps], project_name: str, synonym: str,
-) -> str:
-    """Add an alternative name for a project (case-insensitive matching)."""
-    logger.info("pm_add_project_synonym: project=%r synonym=%r", project_name, synonym)
-    db = _get_db(ctx)
     proj_svc = ProjectService(db)
-    return proj_svc.add_synonym(project_name, synonym)
+    if add_synonyms:
+        for synonym in (s.strip() for s in add_synonyms.split(",") if s.strip()):
+            parts.append(proj_svc.add_synonym(name, synonym))
+    if remove_synonyms:
+        for synonym in (s.strip() for s in remove_synonyms.split(",") if s.strip()):
+            parts.append(proj_svc.remove_synonym(synonym))
 
-
-def pm_remove_project_synonym(ctx: RunContext[Deps], synonym: str) -> str:
-    """Remove an alternative name for a project."""
-    logger.info("pm_remove_project_synonym: synonym=%r", synonym)
-    db = _get_db(ctx)
-    proj_svc = ProjectService(db)
-    return proj_svc.remove_synonym(synonym)
+    return "\n".join(parts)
 
 
 def pm_match_project(ctx: RunContext[Deps], reference: str) -> str:
@@ -524,93 +524,60 @@ def pm_check_synonym_conflicts(ctx: RunContext[Deps]) -> str:
     return proj_svc.check_synonym_conflicts()
 
 
-def pm_add_project_match_info(
+def pm_manage_match_info(
     ctx: RunContext[Deps],
-    project_name: str,
-    info_type: str,
-    value: str,
+    action: str,
+    project_name: str = "",
+    info_type: str = "",
+    value: str = "",
 ) -> str:
-    """Add matching metadata to a project for email-to-project matching.
+    """Manage project match rules for email-to-project matching.
 
     Args:
+        action: Operation — add, remove, or list.
         project_name: Project name or synonym.
-        info_type: Rule type — email_domain, contact, project_number, or keyword.
-        value: The value for the rule (e.g., a domain name or keyword).
+        info_type: Rule type — email_domain, contact, project_number, or keyword
+            (required for add/remove).
+        value: The rule value (required for add/remove).
     """
     logger.info(
-        "pm_add_project_match_info: project=%r type=%r value=%r",
-        project_name, info_type, value,
-    )
-    if info_type not in VALID_MATCH_RULE_TYPES:
-        return ERR_INVALID_MATCH_RULE_TYPE.format(rule_type=info_type)
-
-    db = _get_db(ctx)
-    proj_svc = ProjectService(db)
-    result = proj_svc.add_match_rule(project_name, info_type, value)
-
-    # Update Obsidian note if linked
-    project = proj_svc.find_project(project_name)
-    if project and project.obsidian_vault and project.obsidian_path:
-        obsidian_service = _get_obsidian_service(ctx)
-        if obsidian_service:
-            proj_svc.update_obsidian_matching_section(project, obsidian_service)
-
-    return result
-
-
-def pm_remove_project_match_info(
-    ctx: RunContext[Deps],
-    project_name: str,
-    info_type: str,
-    value: str,
-) -> str:
-    """Remove matching metadata from a project.
-
-    Args:
-        project_name: Project name or synonym.
-        info_type: Rule type — email_domain, contact, project_number, or keyword.
-        value: The value to remove.
-    """
-    logger.info(
-        "pm_remove_project_match_info: project=%r type=%r value=%r",
-        project_name, info_type, value,
+        "pm_manage_match_info: action=%r project=%r type=%r value=%r",
+        action, project_name, info_type, value,
     )
     db = _get_db(ctx)
     proj_svc = ProjectService(db)
-    result = proj_svc.remove_match_rule(project_name, info_type, value)
 
-    # Update Obsidian note if linked
-    project = proj_svc.find_project(project_name)
-    if project and project.obsidian_vault and project.obsidian_path:
-        obsidian_service = _get_obsidian_service(ctx)
-        if obsidian_service:
-            proj_svc.update_obsidian_matching_section(project, obsidian_service)
+    if action == "list":
+        project = proj_svc.find_project(project_name)
+        if not project:
+            return ERR_PROJECT_NOT_FOUND.format(reference=project_name)
+        rules = db.get_match_rules_for_project(project.id)
+        grouped: dict[str, list[str]] = {}
+        for rule in rules:
+            grouped.setdefault(rule.rule_type, []).append(rule.value)
+        return json.dumps({"project": project.name, "match_rules": grouped})
 
-    return result
+    if action == "add":
+        if info_type not in VALID_MATCH_RULE_TYPES:
+            return ERR_INVALID_MATCH_RULE_TYPE.format(rule_type=info_type)
+        result = proj_svc.add_match_rule(project_name, info_type, value)
+        project = proj_svc.find_project(project_name)
+        if project and project.obsidian_vault and project.obsidian_path:
+            obsidian_service = _get_obsidian_service(ctx)
+            if obsidian_service:
+                proj_svc.update_obsidian_matching_section(project, obsidian_service)
+        return result
 
+    if action == "remove":
+        result = proj_svc.remove_match_rule(project_name, info_type, value)
+        project = proj_svc.find_project(project_name)
+        if project and project.obsidian_vault and project.obsidian_path:
+            obsidian_service = _get_obsidian_service(ctx)
+            if obsidian_service:
+                proj_svc.update_obsidian_matching_section(project, obsidian_service)
+        return result
 
-def pm_list_project_match_info(
-    ctx: RunContext[Deps],
-    project_name: str,
-) -> str:
-    """List all match rules configured for a project.
-
-    Args:
-        project_name: Project name or synonym.
-    """
-    logger.info("pm_list_project_match_info: project=%r", project_name)
-    db = _get_db(ctx)
-    proj_svc = ProjectService(db)
-    project = proj_svc.find_project(project_name)
-    if not project:
-        return ERR_PROJECT_NOT_FOUND.format(reference=project_name)
-
-    rules = db.get_match_rules_for_project(project.id)
-    grouped: dict[str, list[str]] = {}
-    for rule in rules:
-        grouped.setdefault(rule.rule_type, []).append(rule.value)
-
-    return json.dumps({"project": project.name, "match_rules": grouped})
+    return f"ERROR: Unknown action '{action}'. Valid: add, remove, list."
 
 
 def pm_match_email_to_project(

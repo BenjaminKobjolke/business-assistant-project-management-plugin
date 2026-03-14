@@ -10,11 +10,7 @@ from pydantic_ai import RunContext
 
 from business_assistant_pm.constants import PLUGIN_DATA_PM_DATABASE
 from business_assistant_pm.database import PmDatabase
-from business_assistant_pm.tools_project import (
-    pm_add_project_match_info,
-    pm_list_project_match_info,
-    pm_remove_project_match_info,
-)
+from business_assistant_pm.tools_project import pm_manage_match_info
 
 
 def _make_ctx(
@@ -31,24 +27,24 @@ def _make_ctx(
     return ctx
 
 
-class TestPmAddProjectMatchInfo:
+class TestPmManageMatchInfoAdd:
     def test_happy_path(self, db: PmDatabase) -> None:
         db.add_project("ACME")
         ctx = _make_ctx(db)
-        result = pm_add_project_match_info(ctx, "ACME", "email_domain", "acme.com")
+        result = pm_manage_match_info(ctx, "add", "ACME", "email_domain", "acme.com")
         assert "added" in result
         assert "acme.com" in result
 
     def test_invalid_type(self, db: PmDatabase) -> None:
         db.add_project("ACME")
         ctx = _make_ctx(db)
-        result = pm_add_project_match_info(ctx, "ACME", "invalid_type", "value")
+        result = pm_manage_match_info(ctx, "add", "ACME", "invalid_type", "value")
         assert "ERROR" in result
         assert "Invalid rule type" in result
 
     def test_project_not_found(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_add_project_match_info(ctx, "Ghost", "email_domain", "x.com")
+        result = pm_manage_match_info(ctx, "add", "Ghost", "email_domain", "x.com")
         assert "not found" in result
 
     def test_updates_obsidian(self, db: PmDatabase) -> None:
@@ -61,28 +57,28 @@ class TestPmAddProjectMatchInfo:
         obsidian.read_note.return_value = json.dumps({"content": "# ACME\n"})
         ctx = _make_ctx(db, obsidian_service=obsidian)
 
-        pm_add_project_match_info(ctx, "ACME", "email_domain", "acme.com")
+        pm_manage_match_info(ctx, "add", "ACME", "email_domain", "acme.com")
         obsidian.edit_note.assert_called_once()
 
     def test_no_obsidian_no_error(self, db: PmDatabase) -> None:
         db.add_project("ACME")
         ctx = _make_ctx(db)
-        result = pm_add_project_match_info(ctx, "ACME", "keyword", "test")
+        result = pm_manage_match_info(ctx, "add", "ACME", "keyword", "test")
         assert "added" in result
 
 
-class TestPmRemoveProjectMatchInfo:
+class TestPmManageMatchInfoRemove:
     def test_happy_path(self, db: PmDatabase) -> None:
         project = db.add_project("ACME")
         db.add_match_rule(project.id, "email_domain", "acme.com")
         ctx = _make_ctx(db)
-        result = pm_remove_project_match_info(ctx, "ACME", "email_domain", "acme.com")
+        result = pm_manage_match_info(ctx, "remove", "ACME", "email_domain", "acme.com")
         assert "removed" in result
 
     def test_not_found(self, db: PmDatabase) -> None:
         db.add_project("ACME")
         ctx = _make_ctx(db)
-        result = pm_remove_project_match_info(ctx, "ACME", "email_domain", "nope.com")
+        result = pm_manage_match_info(ctx, "remove", "ACME", "email_domain", "nope.com")
         assert "not found" in result
 
     def test_updates_obsidian(self, db: PmDatabase) -> None:
@@ -96,17 +92,17 @@ class TestPmRemoveProjectMatchInfo:
         obsidian.read_note.return_value = json.dumps({"content": "# ACME\n"})
         ctx = _make_ctx(db, obsidian_service=obsidian)
 
-        pm_remove_project_match_info(ctx, "ACME", "email_domain", "acme.com")
+        pm_manage_match_info(ctx, "remove", "ACME", "email_domain", "acme.com")
         obsidian.edit_note.assert_called_once()
 
 
-class TestPmListProjectMatchInfo:
+class TestPmManageMatchInfoList:
     def test_with_rules(self, db: PmDatabase) -> None:
         project = db.add_project("ACME")
         db.add_match_rule(project.id, "email_domain", "acme.com")
         db.add_match_rule(project.id, "keyword", "test")
         ctx = _make_ctx(db)
-        result = json.loads(pm_list_project_match_info(ctx, "ACME"))
+        result = json.loads(pm_manage_match_info(ctx, "list", "ACME"))
         assert result["project"] == "ACME"
         assert "acme.com" in result["match_rules"]["email_domain"]
         assert "test" in result["match_rules"]["keyword"]
@@ -114,11 +110,19 @@ class TestPmListProjectMatchInfo:
     def test_empty_rules(self, db: PmDatabase) -> None:
         db.add_project("ACME")
         ctx = _make_ctx(db)
-        result = json.loads(pm_list_project_match_info(ctx, "ACME"))
+        result = json.loads(pm_manage_match_info(ctx, "list", "ACME"))
         assert result["project"] == "ACME"
         assert result["match_rules"] == {}
 
     def test_project_not_found(self, db: PmDatabase) -> None:
         ctx = _make_ctx(db)
-        result = pm_list_project_match_info(ctx, "Ghost")
+        result = pm_manage_match_info(ctx, "list", "Ghost")
         assert "not found" in result
+
+
+class TestPmManageMatchInfoInvalidAction:
+    def test_unknown_action(self, db: PmDatabase) -> None:
+        ctx = _make_ctx(db)
+        result = pm_manage_match_info(ctx, "invalid", "ACME")
+        assert "ERROR" in result
+        assert "Unknown action" in result

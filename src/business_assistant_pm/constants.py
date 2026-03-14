@@ -99,12 +99,12 @@ ERR_OBSIDIAN_NOT_LOADED = (
 )
 ERR_SETTING_MISSING = (
     "ERROR: Required setting '{key}' is not configured. "
-    "Please set it with: pm_set_setting(key=\"{key}\", value=\"<value>\")"
+    "Please set it with: pm_settings(action=\"set\", key=\"{key}\", value=\"<value>\")"
 )
 ERR_CONTACT_NOT_FOUND = "ERROR: Contact '{name}' not found. Use pm_set_contact to add them first."
 ERR_CONTACT_NO_RTM_TAG = (
     "ERROR: Contact '{name}' has no RTM list tag. "
-    "Update with: pm_set_contact(name=\"{name}\", email=\"{email}\", "
+    "Update with: pm_contacts(action=\"set\", name=\"{name}\", email=\"{email}\", "
     "rtm_list_tag=\"#ListName\")"
 )
 ERR_PROJECT_NOT_FOUND = "ERROR: Project '{reference}' not found."
@@ -156,7 +156,7 @@ Only use rtm_* tools for simple tasks unrelated to emails.
 
 ## DEFAULT PRIORITY RULE - CRITICAL
 When creating ANY task (via pm_* or rtm_add_task), ALWAYS include the default priority.
-Check pm_get_settings for the configured default_priority. If not set, use priority 2.
+Check pm_settings(action="get") for the configured default_priority. If not set, use priority 2.
 Never create a task without a priority. Always include !2 (or the configured value) in the
 RTM Smart Add string.
 When previewing a task before creation, always show the project tag explicitly.
@@ -180,7 +180,7 @@ Just records the reference.
 - pm_create_project: Create a new project from Obsidian template
 - pm_create_project_from_note: Create project from an existing Obsidian note
 - pm_list_projects / pm_add_project / pm_update_project
-- pm_add_project_synonym / pm_remove_project_synonym
+- pm_update_project supports add_synonyms/remove_synonyms (comma-separated) for synonym management
 - pm_match_project
 - pm_sync_project_from_obsidian: Re-read note to extract RTM tag and match rules
 - pm_check_synonym_conflicts: Audit all projects for synonym-vs-name conflicts
@@ -189,10 +189,11 @@ Just records the reference.
 - pm_match_email_to_project(sender_email, subject): Score-based matching using project rules.
   Returns best match with score and which factor matched (email_domain, contact,
   project_number, keyword, or name/synonym).
-- pm_add_project_match_info: Add matching metadata to a project. Types: email_domain,
-  contact, project_number, keyword. Also updates the Obsidian note.
-- pm_remove_project_match_info: Remove a matching rule.
-- pm_list_project_match_info: List all match rules configured for a project.
+- pm_manage_match_info(action, project_name, info_type, value): Manage match rules.
+  action="add": Add matching metadata. Types: email_domain, contact, project_number, keyword.
+  action="remove": Remove a matching rule.
+  action="list": List all match rules for a project.
+  Add/remove also update the linked Obsidian note.
 
 When processing emails and determining which project they belong to, prefer
 pm_match_email_to_project over pm_match_project for automatic matching.
@@ -217,24 +218,26 @@ use pm_create_project_from_note. Ask for:
 2. The project name
 The tool extracts the RTM tag and suggests synonyms automatically.
 After the tool returns, present the suggested synonyms to the user and ask
-which ones to add. Use pm_add_project_synonym for each confirmed synonym.
+which ones to add. Use pm_update_project(name=..., add_synonyms="...") for confirmed synonyms.
 Requires setting: project_vault.
 
 ## Contacts & Settings
-- pm_set_contact / pm_list_contacts: Manage delegation contacts with RTM list tags
-- pm_set_setting / pm_get_settings: Configure folders, RTM import email, defaults
-- pm_list_tracking / pm_get_tracking: View tracked email-task records
+- pm_contacts(action): action="list" to list contacts, action="set" to add/update a contact
+- pm_settings(action): action="get" to list all settings, action="set" to store key=value
+- pm_tracking(action): action="list" (with status/delegated_to filters), action="get" (by ID)
 
 ## Delegation Email Format
 Subject uses RTM Smart Add: "Topic !priority ^due #project_tag #contact_list_tag"
 Body: original content + [PM-TRACK:<uuid>]
 
 ## Workflows
-- pm_add_workflow: Create a reusable named workflow with AI instructions and optional synonyms
-- pm_update_workflow: Update the instructions of an existing workflow
-- pm_delete_workflow: Delete a workflow and all its synonyms
-- pm_add_workflow_synonym / pm_remove_workflow_synonym: Manage alternative trigger phrases
-- pm_list_workflows: List all workflows as JSON
+- pm_manage_workflow(action): Manage workflows.
+  action="create": Create with name, instructions, optional synonyms (comma-separated).
+  action="update": Update instructions for a workflow.
+  action="delete": Delete a workflow and its synonyms.
+  action="list": List all workflows as JSON.
+  action="add_synonym": Add an alternative trigger phrase.
+  action="remove_synonym": Remove a trigger phrase.
 - pm_run_workflow: Look up a workflow by name or synonym and return its instructions
 
 When the user mentions running, starting, or executing a workflow, always call pm_run_workflow
@@ -258,4 +261,5 @@ Workflows are reusable multi-step processes defined by the user.
 
 ## Missing Settings Behavior
 If a required setting is missing, the tool returns an error message telling you exactly
-what to ask the user. Then call pm_set_setting to store it. Settings persist in database."""
+what to ask the user. Then call pm_settings(action="set", key=..., value=...) to store it.
+Settings persist in database."""
