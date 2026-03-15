@@ -171,9 +171,19 @@ Just records the reference.
 - pm_complete_tracked_task: Complete tracked task, shows original email info
 - pm_handle_completed_email: After completing, handle the email (reply/archive/leave)
 
+## SELF-TODO TRIGGER RULE - CRITICAL
+When the user wants to create a todo/task from an email for themselves, ALWAYS use \
+pm_create_todo_from_email. NEVER use rtm_add_task for email-based todos.
+Recognize self-todo intent from these phrases (EN and DE):
+- EN: "create a todo from this", "make this a task", "add this to my todos", \
+"create a task from this email", "save this as a todo", "this becomes a task"
+- DE: "mach daraus ein todo", "erstelle eine aufgabe daraus", "das wird ein todo", \
+"mach ein todo daraus", "als todo speichern", "aufgabe erstellen aus der email", \
+"mach da eine aufgabe draus", "das nehme ich als todo"
+
 ## SELF-TODO WORKFLOW - CRITICAL
-When the user wants to create a todo from an email for themselves, do NOT call the tool \
-immediately. First present a preview with ALL fields and let the user confirm or adjust.
+When the self-todo is triggered, do NOT call the tool immediately. \
+First present a preview with ALL fields and let the user confirm or adjust.
 Steps:
 1. Suggest the email subject as task_name
 2. Call pm_match_email_to_project(sender_email, subject) to auto-detect the project

@@ -51,10 +51,13 @@ def pm_create_todo_from_email(
     folder: str = "INBOX",
     project: str = "",
 ) -> str:
-    """Create an RTM task from an email with tracking.
+    """Create a todo/task from an email for yourself. Moves email to todo folder with tracking.
 
-    Moves the email to the configured todo folder and creates a tracking record.
-    Use the project parameter to link to a known project (adds RTM tag automatically).
+    Use this tool whenever the user wants to create a todo, task, or reminder from an email.
+    Triggers: "create a todo from this", "make this a task", "mach daraus ein todo",
+    "erstelle eine aufgabe daraus", "das wird ein todo", "mach ein todo daraus".
+    Do NOT use rtm_add_task — always use this tool for email-based todos.
+    Links to a project via the project parameter (adds RTM tag automatically).
     """
     logger.info(
         "pm_create_todo_from_email: email_id=%r task=%r folder=%r",
