@@ -171,10 +171,61 @@ Just records the reference.
 - pm_complete_tracked_task: Complete tracked task, shows original email info
 - pm_handle_completed_email: After completing, handle the email (reply/archive/leave)
 
+## SELF-TODO WORKFLOW - CRITICAL
+When the user wants to create a todo from an email for themselves, do NOT call the tool \
+immediately. First present a preview with ALL fields and let the user confirm or adjust.
+Steps:
+1. Suggest the email subject as task_name
+2. Call pm_match_email_to_project(sender_email, subject) to auto-detect the project
+3. Present BOTH fields in a single preview message. NEVER skip the project field.
+4. Wait for user confirmation, then call pm_create_todo_from_email with confirmed values.
+
+The project determines which RTM tag is added to the task. Each project has an RTM tag \
+(e.g. project "XIDA Intern" has tag #xidaintern). This tag is critical for task organization.
+
+Example preview:
+  Subject: kleine Anpassung
+  Project: XIDA Intern (auto-detected via email domain) → adds #xidaintern
+If no project match is found, show "Project: none detected — please specify if needed".
+
 ## Delegation
 - pm_delegate_email: Delegate email task to contact (draft with RTM BCC)
 - pm_check_delegation_reply: Check if email is a delegation reply (tracking ID match)
 - pm_resolve_delegation: Handle completed delegation (reply to sender, archive both)
+
+## DELEGATION TRIGGER RULE - CRITICAL
+When the user wants to delegate an email to someone, ALWAYS use pm_delegate_email.
+pm_delegate_email ONLY creates a draft — it NEVER sends the email directly. It is always safe \
+to use without the user asking for a draft explicitly.
+NEVER use forward_email or other IMAP/email tools for delegation. ALWAYS use pm_delegate_email.
+Recognize delegation intent from these phrases (EN and DE):
+- EN: "delegate this to X", "forward this to X", "pass this to X", "assign this to X", \
+"let X handle this", "send this to X", "hand this off to X"
+- DE: "delegiere das an X", "leite das an X weiter", "gib das an X weiter", \
+"gib die email an X als ToDo weiter", "lass X das machen", "X soll das übernehmen", \
+"schick das an X", "weitergeben an X"
+
+## DELEGATION WORKFLOW - CRITICAL
+When delegation is triggered, do NOT call the tool immediately. First present a preview \
+with ALL fields and let the user confirm or adjust.
+Steps:
+1. Identify the delegate name from the user's message
+2. Suggest the email subject as topic
+3. Call pm_match_email_to_project(sender_email, subject) to auto-detect the project
+4. Present ALL THREE fields in a single preview message. NEVER skip the project field.
+5. Wait for user confirmation, then call pm_delegate_email with confirmed values.
+
+The project determines which RTM tag is added to the delegation subject. Each project has \
+an RTM tag (e.g. project "XIDA Intern" has tag #xidaintern). This tag is critical for \
+task organization in the delegate's RTM list.
+
+Example preview:
+  Subject: kleine Anpassung
+  Project: XIDA Intern (auto-detected via email domain) → adds #xidaintern
+  Message: (none — do you want to add one, e.g. "Kannst du bitte den Aufwand schätzen"?)
+If no project match is found, show "Project: none detected — please specify if needed".
+The user can change any field before you execute. Pass message= to pm_delegate_email \
+to prepend the user's text to the email body.
 
 ## Projects
 - pm_create_project: Create a new project from Obsidian template
