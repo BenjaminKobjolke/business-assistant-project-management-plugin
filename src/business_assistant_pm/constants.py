@@ -237,6 +237,11 @@ If no project match is found, show "Project: none detected — please specify if
 The user can change any field before you execute. Pass message= to pm_delegate_email \
 to prepend the user's text to the email body.
 
+### Updating a delegation draft
+If the user wants to change the subject, body, or other fields of an already-created \
+delegation draft, use edit_draft(email_id, subject=..., body=...) to modify it. \
+Only pass the fields that need to change — other fields are preserved from the original.
+
 ## Projects
 - pm_create_project: Create a new project from Obsidian template
 - pm_create_project_from_note: Create project from an existing Obsidian note
