@@ -31,10 +31,25 @@ class DelegationService:
     def build_delegation_body(
         original_body: str,
         tracking_id: str,
+        prefix_message: str = "",
     ) -> str:
-        """Build delegation email body with tracking marker appended."""
-        marker = TRACKING_ID_FORMAT.format(tracking_id=tracking_id)
-        return f"{original_body}\n\n{marker}"
+        """Build delegation email body with optional prefix and tracking marker."""
+        raw_marker = TRACKING_ID_FORMAT.format(tracking_id=tracking_id)
+        is_html = "<html" in original_body.lower() or "<body" in original_body.lower()
+
+        if is_html:
+            prefix_html = f"<p>{prefix_message}</p><br><hr><br>" if prefix_message else ""
+            marker_html = f"<p>{raw_marker}</p>"
+            parts = [p for p in [prefix_html, original_body, marker_html] if p]
+            return "\n".join(parts)
+
+        parts = []
+        if prefix_message:
+            parts.append(prefix_message)
+            parts.append("---")
+        parts.append(original_body)
+        parts.append(raw_marker)
+        return "\n\n".join(parts)
 
     @staticmethod
     def format_tracking_marker(tracking_id: str) -> str:

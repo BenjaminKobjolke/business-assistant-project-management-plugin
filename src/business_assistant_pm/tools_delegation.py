@@ -51,11 +51,16 @@ def pm_delegate_email(
     due: str = "",
     folder: str = "INBOX",
     project: str = "",
+    message: str = "",
 ) -> str:
-    """Delegate an email task to a contact via draft email with RTM BCC.
+    """Delegate/forward an email as a todo to a contact. Creates a draft only (never sends).
 
-    Creates a draft email to the contact with RTM Smart Add subject,
-    moves the original email to the wait folder, and creates tracking.
+    Use this tool whenever the user wants to forward, delegate, or pass an email to someone
+    as a task/todo. Triggers: "delegate to X", "forward to X", "pass to X", "gib an X weiter",
+    "leite an X weiter", "gib die email als todo an X weiter".
+    Do NOT use forward_email — always use this tool for email delegation.
+    Creates RTM task via BCC, moves original to wait folder, and tracks the delegation.
+    message: optional text prepended to the email body (e.g. a request to the delegate).
     """
     logger.info(
         "pm_delegate_email: email_id=%r delegate=%r folder=%r",
@@ -97,6 +102,10 @@ def pm_delegate_email(
     except (json.JSONDecodeError, TypeError):
         pass
 
+    html_body = email_service.get_html_body(email_id, folder)
+    if html_body:
+        email_body = html_body
+
     effective_topic = topic or email_subject
     effective_priority = priority or _get_setting_or_default(
         db, SETTING_DEFAULT_PRIORITY, DEFAULT_PRIORITY
@@ -136,7 +145,7 @@ def pm_delegate_email(
         rtm_tag=rtm_tag,
         contact_list_tag=contact_list_tag,
     )
-    body = delegation_svc.build_delegation_body(email_body, tracking_id)
+    body = delegation_svc.build_delegation_body(email_body, tracking_id, prefix_message=message)
 
     draft_result = email_service.draft_compose(
         to_addresses=[contact.email],
