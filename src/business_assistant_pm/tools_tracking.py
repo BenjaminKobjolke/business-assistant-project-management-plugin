@@ -25,6 +25,7 @@ from .constants import (
     SETTING_TODO_FOLDER,
 )
 from .database import PmDatabase
+from .date_utils import resolve_due_to_absolute
 from .plugin_helpers import (
     _get_email_service,
     _get_rtm_service,
@@ -84,6 +85,7 @@ def pm_create_todo_from_email(
         db, SETTING_DEFAULT_PRIORITY, DEFAULT_PRIORITY
     )
     effective_due = due or _get_setting_or_default(db, SETTING_DEFAULT_DUE, DEFAULT_DUE)
+    effective_due = resolve_due_to_absolute(effective_due, ctx.deps.settings.timezone)
 
     smart_parts = [task_name, f"!{effective_priority}", f"^{effective_due}"]
 

@@ -26,6 +26,7 @@ from .constants import (
     SETTING_WAIT_FOLDER,
 )
 from .database import PmDatabase
+from .date_utils import resolve_due_to_absolute
 from .delegation_service import DelegationService
 from .plugin_helpers import (
     _get_email_service,
@@ -111,6 +112,7 @@ def pm_delegate_email(
         db, SETTING_DEFAULT_PRIORITY, DEFAULT_PRIORITY
     )
     effective_due = due or _get_setting_or_default(db, SETTING_DEFAULT_DUE, DEFAULT_DUE)
+    effective_due = resolve_due_to_absolute(effective_due, ctx.deps.settings.timezone)
 
     rtm_tag = ""
     project_name = None
