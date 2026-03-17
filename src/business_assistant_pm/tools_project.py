@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PureWindowsPath
 
 from business_assistant.agent.deps import Deps
 from pydantic_ai import RunContext
@@ -523,7 +523,7 @@ def pm_store_file_in_project(
         return dir_result
 
     # 7. Build target file path and copy
-    filename = PurePosixPath(source_file_path).name
+    filename = PureWindowsPath(source_file_path).name
     target_file = f"{target_dir}/{filename}"
     copy_result = filesystem_service.copy_file(source_file_path, target_file)
     if not copy_result.startswith("{"):

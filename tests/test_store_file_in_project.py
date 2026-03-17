@@ -116,6 +116,38 @@ class TestPmStoreFileInProject:
         )
         assert "File stored:" in result
 
+    @patch("business_assistant_pm.tools_project.datetime")
+    def test_windows_backslash_path_uses_basename_only(
+        self, mock_dt, db: PmDatabase,
+    ) -> None:
+        """UNC/Windows paths with backslashes must resolve to basename only."""
+        mock_now = MagicMock()
+        mock_now.strftime.return_value = "20260317"
+        mock_dt.now.return_value = mock_now
+
+        self._setup(db)
+        fs = MagicMock()
+        fs.create_directory.return_value = json.dumps(
+            {"path": "Y:/ACME_Folder/Source/20260317_email", "status": "created"},
+        )
+        fs.copy_file.return_value = json.dumps(
+            {"source": "s", "destination": "d", "size": 1, "status": "copied"},
+        )
+        ctx = _make_ctx(db, fs)
+        source = r"\\XIDA-SERVER\CurrentProjects\_inbox_tmp\260086_DC_Spielablauf.pdf"
+        result = pm_store_file_in_project(
+            ctx,
+            project_name="ACME",
+            source_file_path=source,
+            source_type="email",
+        )
+        assert "File stored:" in result
+        # Must use only the basename, not recreate the UNC path structure
+        fs.copy_file.assert_called_once_with(
+            source,
+            "Y:/ACME_Folder/Source/20260317_email/260086_DC_Spielablauf.pdf",
+        )
+
     def test_missing_filesystem_service(self, db: PmDatabase) -> None:
         self._setup(db)
         ctx = _make_ctx(db, filesystem_service=None)
