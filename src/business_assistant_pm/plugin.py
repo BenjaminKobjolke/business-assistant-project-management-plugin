@@ -25,6 +25,7 @@ from .tools_delegation import (
 )
 from .tools_project import (
     pm_add_project,
+    pm_add_project_update,
     pm_check_synonym_conflicts,
     pm_create_project,
     pm_create_project_from_note,
@@ -89,6 +90,7 @@ def register(registry: PluginRegistry) -> None:
         Tool(pm_match_email_to_project, name="pm_match_email_to_project"),
         Tool(pm_log_time, name="pm_log_time"),
         Tool(pm_list_timetracking_projects, name="pm_list_timetracking_projects"),
+        Tool(pm_add_project_update, name="pm_add_project_update"),
         Tool(pm_settings, name="pm_settings"),
         Tool(pm_tracking, name="pm_tracking"),
         Tool(pm_manage_workflow, name="pm_manage_workflow"),

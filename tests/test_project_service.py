@@ -510,6 +510,207 @@ def _make_ctx_with_obsidian(
     return ctx
 
 
+class TestFormatUpdateLines:
+    def test_single_line(self) -> None:
+        result = ProjectService._format_update_lines("hello world")
+        assert result == ["hello world"]
+
+    def test_multiline(self) -> None:
+        result = ProjectService._format_update_lines("line1\nline2\nline3")
+        assert result == ["line1", "line2", "line3"]
+
+    def test_empty_lines_skipped(self) -> None:
+        result = ProjectService._format_update_lines("line1\n\n\nline2")
+        assert result == ["line1", "line2"]
+
+    def test_whitespace_stripped(self) -> None:
+        result = ProjectService._format_update_lines("  padded  \n  also  ")
+        assert result == ["padded", "also"]
+
+    def test_empty_content(self) -> None:
+        result = ProjectService._format_update_lines("")
+        assert result == []
+
+
+class TestInsertUpdateIntoSection:
+    def test_section_exists_new_date(self) -> None:
+        note = "# Title\n\n## Project Updates\n2026-03-16\nOld entry\n"
+        result = ProjectService._insert_update_into_section(
+            note, "2026-03-17", ["New entry"],
+        )
+        assert "2026-03-17" in result
+        assert "New entry" in result
+        assert "Old entry" in result
+
+    def test_section_exists_existing_date(self) -> None:
+        note = "# Title\n\n## Project Updates\n2026-03-17\nExisting entry\n"
+        result = ProjectService._insert_update_into_section(
+            note, "2026-03-17", ["Added entry"],
+        )
+        assert result.count("2026-03-17") == 1
+        assert "Existing entry" in result
+        assert "Added entry" in result
+        # Added entry should come after existing
+        assert result.index("Existing entry") < result.index("Added entry")
+
+    def test_section_missing_creates_section(self) -> None:
+        note = "# Title\n\nSome content\n"
+        result = ProjectService._insert_update_into_section(
+            note, "2026-03-17", ["First update"],
+        )
+        assert "## Project Updates" in result
+        assert "2026-03-17" in result
+        assert "First update" in result
+
+    def test_multiple_dates_appends_to_correct_one(self) -> None:
+        note = (
+            "## Project Updates\n"
+            "2026-03-16\nOld entry\n"
+            "2026-03-17\nToday entry\n"
+        )
+        result = ProjectService._insert_update_into_section(
+            note, "2026-03-17", ["New today"],
+        )
+        assert result.count("2026-03-17") == 1
+        assert "New today" in result
+        assert "Old entry" in result
+
+    def test_section_followed_by_another_heading(self) -> None:
+        note = (
+            "## Project Updates\n"
+            "2026-03-16\nEntry\n\n"
+            "## Other Section\nOther content\n"
+        )
+        result = ProjectService._insert_update_into_section(
+            note, "2026-03-17", ["New update"],
+        )
+        assert "New update" in result
+        assert "## Other Section" in result
+        # New update should be before the other section
+        assert result.index("New update") < result.index("## Other Section")
+
+    def test_content_with_urls(self) -> None:
+        note = "## Project Updates\n"
+        result = ProjectService._insert_update_into_section(
+            note, "2026-03-17", ["Vimeo: https://vimeo.com/123"],
+        )
+        assert "https://vimeo.com/123" in result
+
+    def test_empty_lines_no_change(self) -> None:
+        note = "# Title\n"
+        result = ProjectService._insert_update_into_section(note, "2026-03-17", [])
+        assert result == note
+
+    def test_existing_date_between_two_dates(self) -> None:
+        note = (
+            "## Project Updates\n"
+            "2026-03-15\nOldest\n"
+            "2026-03-16\nMiddle\n"
+            "2026-03-17\nToday\n"
+        )
+        result = ProjectService._insert_update_into_section(
+            note, "2026-03-16", ["Added to middle"],
+        )
+        assert "Added to middle" in result
+        # Should not duplicate the date
+        assert result.count("2026-03-16") == 1
+        # Should appear after "Middle" but before "2026-03-17"
+        assert result.index("Middle") < result.index("Added to middle")
+        assert result.index("Added to middle") < result.index("2026-03-17\n")
+
+
+class TestCopyFileToResources:
+    def test_happy_path(self, tmp_path) -> None:
+        # Create source file
+        src = tmp_path / "source" / "image.png"
+        src.parent.mkdir()
+        src.write_bytes(b"fake image data")
+
+        # Create vault directory
+        vault = tmp_path / "vault"
+        vault.mkdir()
+
+        svc = ProjectService.__new__(ProjectService)
+        vault_rel, filename = svc.copy_file_to_resources(
+            str(vault), "Projects/2026/MyProject.md", str(src),
+        )
+
+        assert filename == "image.png"
+        assert vault_rel == "Projects/2026/_resources/image.png"
+        assert (vault / "Projects" / "2026" / "_resources" / "image.png").is_file()
+
+    def test_root_level_note(self, tmp_path) -> None:
+        src = tmp_path / "file.pdf"
+        src.write_bytes(b"pdf")
+        vault = tmp_path / "vault"
+        vault.mkdir()
+
+        svc = ProjectService.__new__(ProjectService)
+        vault_rel, filename = svc.copy_file_to_resources(
+            str(vault), "note.md", str(src),
+        )
+        assert vault_rel == "_resources/file.pdf"
+        assert (vault / "_resources" / "file.pdf").is_file()
+
+
+class TestAppendProjectUpdate:
+    def test_happy_path(self, db: PmDatabase) -> None:
+        project = db.add_project(
+            "Test", obsidian_vault="vault", obsidian_path="p.md",
+        )
+        note_content = "# Title\n\n## Project Updates\n"
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": note_content})
+
+        svc = ProjectService(db)
+        result = svc.append_project_update(
+            project, obsidian, "Link: https://example.com", "2026-03-17",
+        )
+
+        assert "added" in result
+        assert "2026-03-17" in result
+        obsidian.edit_note.assert_called_once()
+        written = obsidian.edit_note.call_args[0][2]
+        assert "https://example.com" in written
+        assert "2026-03-17" in written
+
+    def test_with_file_entries(self, db: PmDatabase) -> None:
+        project = db.add_project(
+            "Test", obsidian_vault="vault", obsidian_path="p.md",
+        )
+        note_content = "## Project Updates\n"
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": note_content})
+
+        svc = ProjectService(db)
+        result = svc.append_project_update(
+            project, obsidian, "", "2026-03-17",
+            file_entries=["Projects/_resources/img.png"],
+        )
+
+        assert "added" in result
+        written = obsidian.edit_note.call_args[0][2]
+        assert "![[Projects/_resources/img.png]]" in written
+
+    def test_no_vault_returns_none(self, db: PmDatabase) -> None:
+        project = db.add_project("Test")
+        obsidian = MagicMock()
+        svc = ProjectService(db)
+        result = svc.append_project_update(project, obsidian, "text", "2026-03-17")
+        assert result is None
+
+    def test_no_content_no_files(self, db: PmDatabase) -> None:
+        project = db.add_project(
+            "Test", obsidian_vault="vault", obsidian_path="p.md",
+        )
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": "note"})
+
+        svc = ProjectService(db)
+        result = svc.append_project_update(project, obsidian, "", "2026-03-17")
+        assert "No content" in result
+
+
 class TestPmUpdateProjectObsidianPush:
     def test_rtm_tag_update_pushes_to_obsidian(self, db: PmDatabase) -> None:
         db.add_project(

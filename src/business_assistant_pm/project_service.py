@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from .constants import (
@@ -19,6 +21,7 @@ from .constants import (
     MATCH_SCORE_HARD,
     MATCH_SCORE_NAME,
     MATCH_SCORE_SOFT,
+    OBSIDIAN_SECTION_PROJECT_UPDATES,
     VALID_MATCH_RULE_TYPES,
 )
 from .database import PmDatabase, PmProject, PmProjectMatchRule
@@ -527,3 +530,144 @@ class ProjectService:
         """Build the full vault-relative path for a new project note."""
         year = str(datetime.now(tz=UTC).year)
         return f"{folder_path}/{year}/{filename}.md"
+
+    @staticmethod
+    def _format_update_lines(content: str) -> list[str]:
+        """Split content into non-empty stripped lines."""
+        return [line.strip() for line in content.split("\n") if line.strip()]
+
+    @staticmethod
+    def _insert_update_into_section(
+        note_content: str,
+        today_str: str,
+        lines: list[str],
+    ) -> str:
+        """Insert update lines into the ## Project Updates section.
+
+        Creates the section if it does not exist. Groups entries under date headers.
+        """
+        if not lines:
+            return note_content
+
+        new_block = "\n".join(lines)
+        section_re = re.compile(
+            r"^" + re.escape(OBSIDIAN_SECTION_PROJECT_UPDATES) + r"[ \t]*$",
+            re.MULTILINE,
+        )
+        section_match = section_re.search(note_content)
+
+        if not section_match:
+            # Section does not exist — append at end
+            return (
+                note_content.rstrip()
+                + f"\n\n{OBSIDIAN_SECTION_PROJECT_UPDATES}\n{today_str}\n{new_block}\n"
+            )
+
+        # Find section boundaries
+        section_start = section_match.end()
+        next_heading = re.search(
+            r"^## (?!Project Updates)", note_content[section_start:], re.MULTILINE,
+        )
+        section_end = section_start + next_heading.start() if next_heading else len(note_content)
+        section_text = note_content[section_start:section_end]
+
+        # Check if today's date already exists in the section
+        date_re = re.compile(r"^" + re.escape(today_str) + r"[ \t]*$", re.MULTILINE)
+        date_match = date_re.search(section_text)
+
+        if date_match:
+            # Find end of today's entry block (next date line or section end)
+            after_date = date_match.end()
+            next_date = re.search(
+                r"^\d{4}-\d{2}-\d{2}[ \t]*$", section_text[after_date:], re.MULTILINE,
+            )
+            if next_date:
+                insert_pos = section_start + after_date + next_date.start()
+                # Insert before the trailing newline of last entry
+                return (
+                    note_content[:insert_pos].rstrip()
+                    + "\n" + new_block + "\n"
+                    + note_content[insert_pos:]
+                )
+            # No next date — insert at end of section
+            insert_pos = section_end
+            return (
+                note_content[:insert_pos].rstrip()
+                + "\n" + new_block + "\n"
+                + note_content[insert_pos:]
+            )
+
+        # Today's date not found — add new date block at end of section
+        insert_pos = section_end
+        return (
+            note_content[:insert_pos].rstrip()
+            + f"\n{today_str}\n{new_block}\n"
+            + note_content[insert_pos:]
+        )
+
+    @staticmethod
+    def copy_file_to_resources(
+        vault_path: str,
+        note_path: str,
+        file_path: str,
+    ) -> tuple[str, str]:
+        """Copy a file into the _resources subfolder next to the project note.
+
+        Returns (vault_relative_resource_path, filename).
+        """
+        note_dir = str(Path(note_path).parent).replace("\\", "/")
+        resources_rel = "_resources" if note_dir == "." else f"{note_dir}/_resources"
+
+        resources_abs = Path(vault_path) / resources_rel
+        resources_abs.mkdir(parents=True, exist_ok=True)
+
+        src = Path(file_path)
+        dest = resources_abs / src.name
+        shutil.copy2(str(src), str(dest))
+
+        vault_rel = f"{resources_rel}/{src.name}".replace("\\", "/")
+        return vault_rel, src.name
+
+    def append_project_update(
+        self,
+        project: PmProject,
+        obsidian_service: Any,
+        content: str,
+        today_str: str,
+        file_entries: list[str] | None = None,
+    ) -> str:
+        """Append an update to the ## Project Updates section in the Obsidian note.
+
+        Args:
+            project: The project with obsidian_vault and obsidian_path set.
+            obsidian_service: The Obsidian service for reading/writing notes.
+            content: The update text (can be multi-line).
+            today_str: Today's date as YYYY-MM-DD string.
+            file_entries: Optional list of vault-relative resource paths to embed.
+
+        Returns:
+            Confirmation message or error string.
+        """
+        vault = project.obsidian_vault
+        path = project.obsidian_path
+        if not vault or not path:
+            return None  # type: ignore[return-value]
+
+        raw = obsidian_service.read_note(vault, path)
+        data = json.loads(raw)
+        note_content = data.get("content", "")
+
+        all_lines: list[str] = []
+        if content:
+            all_lines.extend(self._format_update_lines(content))
+        if file_entries:
+            for entry in file_entries:
+                all_lines.append(f"![[{entry}]]")
+
+        if not all_lines:
+            return f"No content to add for project '{project.name}'."
+
+        modified = self._insert_update_into_section(note_content, today_str, all_lines)
+        obsidian_service.edit_note(vault, path, modified, mode="replace")
+
+        return f"Project update added to '{project.name}' for {today_str}."

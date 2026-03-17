@@ -97,6 +97,9 @@ PM_FIELD_OBSIDIAN_HEADINGS: dict[str, str] = {
     "project_folder": "Projektordner",
 }
 
+# Obsidian note section headers
+OBSIDIAN_SECTION_PROJECT_UPDATES = "## Project Updates"
+
 # Error messages
 ERR_RTM_NOT_LOADED = "ERROR: RTM plugin not loaded. Project management requires RTM."
 ERR_EMAIL_NOT_LOADED = "ERROR: IMAP plugin not loaded. Project management requires IMAP."
@@ -149,6 +152,15 @@ ERR_EMAIL_REF_NOT_FOUND = "ERROR: Email reference with ID {ref_id} not found."
 ERR_SYNONYM_CONFLICTS_WITH_PROJECT_NAME = (
     "ERROR: Synonym '{synonym}' conflicts with existing project name '{project_name}'."
 )
+ERR_PROJECT_NO_OBSIDIAN = (
+    "ERROR: Project '{name}' has no Obsidian note linked. "
+    "Set vault and path with: pm_update_project(name=\"{name}\", "
+    "obsidian_vault=\"...\", obsidian_path=\"...\")"
+)
+ERR_PROJECT_UPDATE_READ_FAILED = "ERROR: Failed to read project note: {error}"
+ERR_PROJECT_UPDATE_WRITE_FAILED = "ERROR: Failed to write project update: {error}"
+ERR_PROJECT_UPDATE_FILE_NOT_FOUND = "ERROR: File not found: {path}"
+ERR_PROJECT_UPDATE_FILE_COPY_FAILED = "ERROR: Failed to copy file '{path}': {error}"
 
 # System prompt extra
 SYSTEM_PROMPT_PM = """\
@@ -330,6 +342,13 @@ Workflows are reusable multi-step processes defined by the user.
   Requires the project to have a timetracking_project_id configured.
   Args: project_name, time_seconds (int), comment, adjust_time (optional, e.g. "-1h")
 - pm_list_timetracking_projects: List all available projects from the timetracking system.
+
+## Project Updates
+- pm_add_project_update: Append updates to a project's Obsidian note under ## Project Updates.
+  Adds content under today's date (YYYY-MM-DD). If today already has entries, appends below them.
+  If the ## Project Updates section does not exist in the note, it is created automatically.
+  Args: project_name (name or synonym), content (text, can be multi-line), file_paths (optional,
+  comma-separated absolute file paths to copy into the note's _resources folder and embed).
 
 ## Missing Settings Behavior
 If a required setting is missing, the tool returns an error message telling you exactly

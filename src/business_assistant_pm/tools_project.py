@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from business_assistant.agent.deps import Deps
 from pydantic_ai import RunContext
@@ -17,8 +17,12 @@ from .constants import (
     ERR_NOTE_CREATION_FAILED,
     ERR_OBSIDIAN_NOT_LOADED,
     ERR_PROJECT_NO_FOLDER,
+    ERR_PROJECT_NO_OBSIDIAN,
     ERR_PROJECT_NO_TIMETRACKING,
     ERR_PROJECT_NOT_FOUND,
+    ERR_PROJECT_UPDATE_FILE_COPY_FAILED,
+    ERR_PROJECT_UPDATE_FILE_NOT_FOUND,
+    ERR_PROJECT_UPDATE_WRITE_FAILED,
     ERR_TEMPLATE_READ_FAILED,
     ERR_WORKINGTIMES_NOT_LOADED,
     PLUGIN_DATA_PM_DATABASE,
@@ -668,3 +672,74 @@ def pm_list_timetracking_projects(ctx: RunContext[Deps]) -> str:
         return ERR_WORKINGTIMES_NOT_LOADED
 
     return workingtimes_service.list_projects()
+
+
+def pm_add_project_update(
+    ctx: RunContext[Deps],
+    project_name: str,
+    content: str = "",
+    file_paths: str = "",
+) -> str:
+    """Append an update to a project's Obsidian note under ## Project Updates.
+
+    Adds content under today's date. If today already has entries, new content is
+    appended below them. If the section does not exist, it is created.
+    File paths are copied to the note's _resources folder and embedded as links.
+
+    Args:
+        project_name: Project name or synonym to look up.
+        content: Update text to add (can be multi-line).
+        file_paths: Optional comma-separated absolute file paths to copy and embed.
+    """
+    logger.info("pm_add_project_update: project=%r", project_name)
+
+    # 1. Get obsidian service
+    obsidian_service = _get_obsidian_service(ctx)
+    if not obsidian_service:
+        return ERR_OBSIDIAN_NOT_LOADED
+
+    # 2. Find project
+    db = _get_db(ctx)
+    proj_svc = ProjectService(db)
+    project = proj_svc.find_project(project_name)
+    if not project:
+        return ERR_PROJECT_NOT_FOUND.format(reference=project_name)
+
+    # 3. Check obsidian link
+    if not project.obsidian_vault or not project.obsidian_path:
+        return ERR_PROJECT_NO_OBSIDIAN.format(name=project.name)
+
+    # 4. Today's date
+    today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+
+    # 5. Handle file copies
+    file_entries: list[str] = []
+    warnings: list[str] = []
+    if file_paths:
+        vault_path = obsidian_service.get_vault_path(project.obsidian_vault)
+        for raw_path in file_paths.split(","):
+            fp = raw_path.strip()
+            if not fp:
+                continue
+            if not Path(fp).is_file():
+                warnings.append(ERR_PROJECT_UPDATE_FILE_NOT_FOUND.format(path=fp))
+                continue
+            try:
+                vault_rel, _ = proj_svc.copy_file_to_resources(
+                    vault_path, project.obsidian_path, fp,
+                )
+                file_entries.append(vault_rel)
+            except Exception as e:
+                warnings.append(ERR_PROJECT_UPDATE_FILE_COPY_FAILED.format(path=fp, error=e))
+
+    # 6. Append update
+    try:
+        result = proj_svc.append_project_update(
+            project, obsidian_service, content, today_str, file_entries or None,
+        )
+    except Exception as e:
+        return ERR_PROJECT_UPDATE_WRITE_FAILED.format(error=e)
+
+    if warnings:
+        return result + "\n" + "\n".join(warnings)
+    return result
