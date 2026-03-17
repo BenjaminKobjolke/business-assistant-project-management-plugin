@@ -40,6 +40,9 @@ from .tools_project import (
     pm_update_project,
 )
 from .tools_settings import (
+    pm_add_deadline,
+    pm_get_deadlines,
+    pm_set_deadlines_list,
     pm_settings,
     pm_tracking,
 )
@@ -93,6 +96,9 @@ def register(registry: PluginRegistry) -> None:
         Tool(pm_add_project_update, name="pm_add_project_update"),
         Tool(pm_settings, name="pm_settings"),
         Tool(pm_tracking, name="pm_tracking"),
+        Tool(pm_set_deadlines_list, name="pm_set_deadlines_list"),
+        Tool(pm_get_deadlines, name="pm_get_deadlines"),
+        Tool(pm_add_deadline, name="pm_add_deadline"),
         Tool(pm_manage_workflow, name="pm_manage_workflow"),
         Tool(pm_run_workflow, name="pm_run_workflow"),
     ]

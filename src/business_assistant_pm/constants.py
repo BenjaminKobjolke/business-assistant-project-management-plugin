@@ -9,7 +9,7 @@ DEFAULT_PM_DB_PATH = "data/pm.db"
 # Plugin name and category
 PLUGIN_NAME = "project_management"
 PLUGIN_CATEGORY = "project_management"
-PLUGIN_DESCRIPTION = "Project management orchestration"
+PLUGIN_DESCRIPTION = "Project management orchestration, deadlines, delegation"
 
 # Plugin data keys
 PLUGIN_DATA_PM_DATABASE = "pm_database"
@@ -39,6 +39,7 @@ SETTING_PROJECT_VAULT = "project_vault"
 SETTING_PROJECT_TEMPLATE_PATH = "project_template_path"
 SETTING_PROJECT_FOLDER_PATH = "project_folder_path"
 SETTING_PROJECT_FILES_BASE_PATH = "project_files_base_path"
+SETTING_DEADLINES_LIST = "deadlines_list"
 
 # Setting defaults (used when not configured)
 DEFAULT_PRIORITY = "2"
@@ -161,6 +162,11 @@ ERR_PROJECT_UPDATE_READ_FAILED = "ERROR: Failed to read project note: {error}"
 ERR_PROJECT_UPDATE_WRITE_FAILED = "ERROR: Failed to write project update: {error}"
 ERR_PROJECT_UPDATE_FILE_NOT_FOUND = "ERROR: File not found: {path}"
 ERR_PROJECT_UPDATE_FILE_COPY_FAILED = "ERROR: Failed to copy file '{path}': {error}"
+ERR_DEADLINES_LIST_NOT_SET = (
+    "ERROR: No deadlines list configured. "
+    "Set it with: pm_set_deadlines_list(list_name=\"<RTM list name>\")"
+)
+ERR_DEADLINES_LIST_NOT_FOUND = "ERROR: RTM list '{list_name}' not found."
 
 # System prompt extra
 SYSTEM_PROMPT_PM = """\
@@ -349,6 +355,18 @@ Workflows are reusable multi-step processes defined by the user.
   If the ## Project Updates section does not exist in the note, it is created automatically.
   Args: project_name (name or synonym), content (text, can be multi-line), file_paths (optional,
   comma-separated absolute file paths to copy into the note's _resources folder and embed).
+
+## Deadlines
+- pm_set_deadlines_list(list_name): Configure which RTM list holds deadlines.
+- pm_get_deadlines(): Retrieve incomplete tasks from the configured deadlines list, \
+sorted by due date.
+- pm_add_deadline(task_name, due, priority, project): Add a deadline to the deadlines list.
+  If project is provided, the project's RTM tag is added automatically.
+  If project is empty or "none", it's a plain task add.
+When the user asks about deadlines ("What is my next deadline?", \
+"Wann ist meine nächste Deadline?"), use pm_get_deadlines. \
+If no deadlines list is configured, it will tell you what to set.
+When adding a deadline, always ask which project it belongs to (user can say "none").
 
 ## Missing Settings Behavior
 If a required setting is missing, the tool returns an error message telling you exactly
