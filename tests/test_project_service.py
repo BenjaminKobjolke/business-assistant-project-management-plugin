@@ -394,3 +394,165 @@ class TestPmUpdateProjectSynonyms:
         db.add_project("Project")
         result = pm_update_project(ctx, "Project", remove_synonyms="ghost")
         assert "not found" in result
+
+
+class TestUpdateObsidianField:
+    def test_updates_existing_rtm_tag(self, db: PmDatabase) -> None:
+        project = db.add_project(
+            "Test", rtm_tag="#old", obsidian_vault="vault", obsidian_path="test.md",
+        )
+        content = "**RTM Tag**\n\n#old_tag\n\n**Projektordner**\nOldFolder\n"
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": content})
+
+        svc = ProjectService(db)
+        result = svc.update_obsidian_field(project, obsidian, "RTM Tag", "#new_tag")
+
+        assert result == "Obsidian note updated."
+        obsidian.edit_note.assert_called_once()
+        written_content = obsidian.edit_note.call_args[0][2]
+        assert "#new_tag" in written_content
+        assert "#old_tag" not in written_content
+
+    def test_updates_existing_projektordner(self, db: PmDatabase) -> None:
+        project = db.add_project(
+            "Test", obsidian_vault="vault", obsidian_path="test.md",
+        )
+        content = "**RTM Tag**\n\n#p_test\n\n**Projektordner**\nOldFolder\n"
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": content})
+
+        svc = ProjectService(db)
+        result = svc.update_obsidian_field(project, obsidian, "Projektordner", "NewFolder")
+
+        assert result == "Obsidian note updated."
+        written_content = obsidian.edit_note.call_args[0][2]
+        assert "NewFolder" in written_content
+        assert "OldFolder" not in written_content
+
+    def test_field_not_in_note_returns_none(self, db: PmDatabase) -> None:
+        project = db.add_project(
+            "Test", obsidian_vault="vault", obsidian_path="test.md",
+        )
+        content = "Just plain text without any headings.\n"
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": content})
+
+        svc = ProjectService(db)
+        result = svc.update_obsidian_field(project, obsidian, "RTM Tag", "#new")
+
+        assert result is None
+        obsidian.edit_note.assert_not_called()
+
+    def test_no_vault_returns_none(self, db: PmDatabase) -> None:
+        project = db.add_project("Test")
+        obsidian = MagicMock()
+        svc = ProjectService(db)
+        result = svc.update_obsidian_field(project, obsidian, "RTM Tag", "#new")
+        assert result is None
+        obsidian.read_note.assert_not_called()
+
+    def test_read_failure_returns_none(self, db: PmDatabase) -> None:
+        project = db.add_project(
+            "Test", obsidian_vault="vault", obsidian_path="test.md",
+        )
+        obsidian = MagicMock()
+        obsidian.read_note.side_effect = RuntimeError("connection failed")
+
+        svc = ProjectService(db)
+        result = svc.update_obsidian_field(project, obsidian, "RTM Tag", "#new")
+
+        assert result is None
+
+    def test_write_failure_returns_none(self, db: PmDatabase) -> None:
+        project = db.add_project(
+            "Test", obsidian_vault="vault", obsidian_path="test.md",
+        )
+        content = "**RTM Tag**\n\n#old_tag\n"
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": content})
+        obsidian.edit_note.side_effect = RuntimeError("write failed")
+
+        svc = ProjectService(db)
+        result = svc.update_obsidian_field(project, obsidian, "RTM Tag", "#new")
+
+        assert result is None
+
+    def test_rtm_tag_with_escaped_hash(self, db: PmDatabase) -> None:
+        project = db.add_project(
+            "Test", obsidian_vault="vault", obsidian_path="test.md",
+        )
+        content = "**RTM Tag**\n\n\\#old_tag\n\n**Next**\n"
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": content})
+
+        svc = ProjectService(db)
+        result = svc.update_obsidian_field(project, obsidian, "RTM Tag", "#new_tag")
+
+        assert result == "Obsidian note updated."
+        written_content = obsidian.edit_note.call_args[0][2]
+        assert "#new_tag" in written_content
+        assert "\\#old_tag" not in written_content
+
+
+def _make_ctx_with_obsidian(
+    db: PmDatabase, obsidian_service: MagicMock,
+) -> RunContext[Deps]:
+    """Build a RunContext with both PM database and obsidian service."""
+    plugin_data: dict = {
+        PLUGIN_DATA_PM_DATABASE: db,
+        "obsidian_service": obsidian_service,
+    }
+    deps = MagicMock(spec=Deps)
+    deps.plugin_data = plugin_data
+    ctx = MagicMock(spec=RunContext)
+    ctx.deps = deps
+    return ctx
+
+
+class TestPmUpdateProjectObsidianPush:
+    def test_rtm_tag_update_pushes_to_obsidian(self, db: PmDatabase) -> None:
+        db.add_project(
+            "MyProject", obsidian_vault="vault", obsidian_path="p.md",
+        )
+        content = "**RTM Tag**\n\n#old\n\n**Projektordner**\nOld\n"
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": content})
+
+        ctx = _make_ctx_with_obsidian(db, obsidian)
+        result = pm_update_project(ctx, "MyProject", rtm_tag="#new_tag")
+
+        assert "updated" in result
+        obsidian.edit_note.assert_called_once()
+        written_content = obsidian.edit_note.call_args[0][2]
+        assert "#new_tag" in written_content
+
+    def test_no_obsidian_link_skips_push(self, db: PmDatabase) -> None:
+        db.add_project("MyProject")
+        ctx = _make_ctx(db)
+        result = pm_update_project(ctx, "MyProject", rtm_tag="#new_tag")
+        assert "updated" in result
+
+    def test_no_obsidian_service_skips_push(self, db: PmDatabase) -> None:
+        db.add_project(
+            "MyProject", obsidian_vault="vault", obsidian_path="p.md",
+        )
+        ctx = _make_ctx(db)
+        result = pm_update_project(ctx, "MyProject", rtm_tag="#new_tag")
+        assert "updated" in result
+
+    def test_project_folder_update_pushes_to_obsidian(self, db: PmDatabase) -> None:
+        db.add_project(
+            "MyProject", obsidian_vault="vault", obsidian_path="p.md",
+        )
+        content = "**Projektordner**\nOldFolder\n"
+        obsidian = MagicMock()
+        obsidian.read_note.return_value = json.dumps({"content": content})
+
+        ctx = _make_ctx_with_obsidian(db, obsidian)
+        result = pm_update_project(ctx, "MyProject", project_folder="NewFolder")
+
+        assert "updated" in result
+        obsidian.edit_note.assert_called()
+        written_content = obsidian.edit_note.call_args[0][2]
+        assert "NewFolder" in written_content

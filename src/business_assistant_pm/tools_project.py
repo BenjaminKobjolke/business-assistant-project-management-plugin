@@ -22,6 +22,7 @@ from .constants import (
     ERR_TEMPLATE_READ_FAILED,
     ERR_WORKINGTIMES_NOT_LOADED,
     PLUGIN_DATA_PM_DATABASE,
+    PM_FIELD_OBSIDIAN_HEADINGS,
     REQUIRED_SETTINGS_CREATE_PROJECT,
     REQUIRED_SETTINGS_FROM_NOTE,
     SETTING_PROJECT_FILES_BASE_PATH,
@@ -163,6 +164,7 @@ def pm_update_project(
     if not has_field_updates and not has_synonym_changes:
         return f"No fields to update for project '{name}'."
 
+    proj_svc = ProjectService(db)
     parts: list[str] = []
 
     if has_field_updates:
@@ -178,7 +180,17 @@ def pm_update_project(
         updated_fields = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
         parts.append(f"Project '{name}' updated: {updated_fields}")
 
-    proj_svc = ProjectService(db)
+        # Push changed fields back to Obsidian note
+        updated_project = db.get_project_by_name(name)
+        if updated_project and updated_project.obsidian_vault and updated_project.obsidian_path:
+            obsidian_service = _get_obsidian_service(ctx)
+            if obsidian_service:
+                for field_key, heading in PM_FIELD_OBSIDIAN_HEADINGS.items():
+                    if field_key in kwargs:
+                        proj_svc.update_obsidian_field(
+                            updated_project, obsidian_service, heading, kwargs[field_key],
+                        )
+
     if add_synonyms:
         for synonym in (s.strip() for s in add_synonyms.split(",") if s.strip()):
             parts.append(proj_svc.add_synonym(name, synonym))

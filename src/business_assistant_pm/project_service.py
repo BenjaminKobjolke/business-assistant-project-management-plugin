@@ -315,6 +315,39 @@ class ProjectService:
 
         return "Obsidian note updated."
 
+    def update_obsidian_field(
+        self,
+        project: PmProject,
+        obsidian_service: Any,
+        field_name: str,
+        new_value: str,
+    ) -> str | None:
+        """Update a **FieldName** value in the project's Obsidian note."""
+        vault = project.obsidian_vault
+        path = project.obsidian_path
+        if not vault or not path:
+            return None
+
+        try:
+            raw = obsidian_service.read_note(vault, path)
+            data = json.loads(raw)
+            content = data.get("content", "")
+        except Exception:
+            return None
+
+        pattern = rf"(\*\*{re.escape(field_name)}\*\*\s*\n+\s*)\S.*?(?=\n|$)"
+        if not re.search(pattern, content):
+            return None
+
+        content = re.sub(pattern, lambda m: m.group(1) + new_value, content, count=1)
+
+        try:
+            obsidian_service.edit_note(vault, path, content, mode="replace")
+        except Exception:
+            return None
+
+        return "Obsidian note updated."
+
     def match_email_to_project(self, sender_email: str, subject: str) -> str:
         """Score-based email-to-project matching. Returns JSON."""
         all_rules = self._db.get_all_match_rules()

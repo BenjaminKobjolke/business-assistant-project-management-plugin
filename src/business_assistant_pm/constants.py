@@ -91,6 +91,12 @@ MATCH_RULE_OBSIDIAN_FIELDS = {
     MATCH_RULE_KEYWORD: "keywords",
 }
 
+# PM database field -> Obsidian note heading name
+PM_FIELD_OBSIDIAN_HEADINGS: dict[str, str] = {
+    "rtm_tag": "RTM Tag",
+    "project_folder": "Projektordner",
+}
+
 # Error messages
 ERR_RTM_NOT_LOADED = "ERROR: RTM plugin not loaded. Project management requires RTM."
 ERR_EMAIL_NOT_LOADED = "ERROR: IMAP plugin not loaded. Project management requires IMAP."
