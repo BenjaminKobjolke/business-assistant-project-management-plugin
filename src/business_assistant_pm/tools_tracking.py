@@ -12,15 +12,11 @@ from .constants import (
     ACTION_ARCHIVE,
     ACTION_LEAVE,
     ACTION_REPLY_AND_ARCHIVE,
-    DEFAULT_DUE,
-    DEFAULT_PRIORITY,
     ERR_EMAIL_NOT_LOADED,
     ERR_PROJECT_NOT_FOUND,
     ERR_RTM_NOT_LOADED,
     ERR_TRACKING_NOT_FOUND,
     PLUGIN_DATA_PM_DATABASE,
-    SETTING_DEFAULT_DUE,
-    SETTING_DEFAULT_PRIORITY,
     SETTING_RTM_DEFAULT_TAG,
     SETTING_TODO_FOLDER,
 )
@@ -29,7 +25,6 @@ from .date_utils import resolve_due_to_absolute
 from .plugin_helpers import (
     _get_email_service,
     _get_rtm_service,
-    _get_setting_or_default,
     _require_setting,
 )
 from .project_service import ProjectService
@@ -61,9 +56,25 @@ def pm_create_todo_from_email(
     Links to a project via the project parameter (adds RTM tag automatically).
     """
     logger.info(
-        "pm_create_todo_from_email: email_id=%r task=%r folder=%r",
-        email_id, task_name, folder,
+        "pm_create_todo_from_email: email_id=%r task=%r folder=%r due=%r priority=%r",
+        email_id, task_name, folder, due, priority,
     )
+
+    if not due:
+        return (
+            "Error: 'due' parameter is required. "
+            "You must pass the due date explicitly "
+            "(e.g. due='today', due='tomorrow', due='monday'). "
+            "Ask the user when the task is due if they didn't specify."
+        )
+    if not priority:
+        return (
+            "Error: 'priority' parameter is required. "
+            "You must pass the priority explicitly "
+            "(e.g. priority='1' for high, priority='2' for medium, "
+            "priority='3' for low). "
+            "Ask the user for the priority if they didn't specify."
+        )
 
     rtm_service = _get_rtm_service(ctx)
     if not rtm_service:
@@ -81,13 +92,9 @@ def pm_create_todo_from_email(
 
     todo_folder = db.get_setting(SETTING_TODO_FOLDER)
     assert todo_folder is not None
-    effective_priority = priority or _get_setting_or_default(
-        db, SETTING_DEFAULT_PRIORITY, DEFAULT_PRIORITY
-    )
-    effective_due = due or _get_setting_or_default(db, SETTING_DEFAULT_DUE, DEFAULT_DUE)
-    effective_due = resolve_due_to_absolute(effective_due, ctx.deps.settings.timezone)
+    effective_due = resolve_due_to_absolute(due, ctx.deps.settings.timezone)
 
-    smart_parts = [task_name, f"!{effective_priority}", f"^{effective_due}"]
+    smart_parts = [task_name, f"!{priority}", f"^{effective_due}"]
 
     project_name = None
     if project:
@@ -121,9 +128,16 @@ def pm_create_todo_from_email(
     except (json.JSONDecodeError, TypeError):
         pass
 
-    result = rtm_service.add_task(smart_name)
+    result, rtm_task_id = rtm_service.add_task_with_id(smart_name)
     if result.startswith("Error"):
         return result
+
+    if rtm_task_id and email_subject:
+        rtm_service.add_note(
+            rtm_task_id,
+            "Email Reference",
+            f"From: {email_from}\nSubject: {email_subject}",
+        )
 
     tracking_svc = TrackingService(db)
     tracking_id = tracking_svc.create_tracking(
@@ -133,6 +147,7 @@ def pm_create_todo_from_email(
         email_from=email_from,
         task_name=task_name,
         project_name=project_name,
+        rtm_task_id=rtm_task_id,
     )
 
     move_result = email_service.move_email(email_id, todo_folder, source_folder=folder)

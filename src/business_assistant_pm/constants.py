@@ -211,14 +211,22 @@ First present a preview with ALL fields and let the user confirm or adjust.
 Steps:
 1. Suggest the email subject as task_name
 2. Call pm_match_email_to_project(sender_email, subject) to auto-detect the project
-3. Present BOTH fields in a single preview message. NEVER skip the project field.
-4. Wait for user confirmation, then call pm_create_todo_from_email with confirmed values.
+3. Extract due date and priority from the user's message. \
+If the user said "today"/"heute", due MUST be "today". \
+If the user said "tomorrow"/"morgen", due MUST be "tomorrow". \
+If not specified, ask the user — due and priority are required.
+4. Present ALL fields (task_name, due, priority, project) in a single preview message. \
+NEVER skip the project field.
+5. Wait for user confirmation, then call pm_create_todo_from_email with ALL confirmed values. \
+CRITICAL: due and priority are REQUIRED — the tool rejects calls without them.
 
 The project determines which RTM tag is added to the task. Each project has an RTM tag \
 (e.g. project "XIDA Intern" has tag #xidaintern). This tag is critical for task organization.
 
 Example preview:
   Subject: kleine Anpassung
+  Due: today
+  Priority: 1 (very important)
   Project: XIDA Intern (auto-detected via email domain) → adds #xidaintern
 If no project match is found, show "Project: none detected — please specify if needed".
 
